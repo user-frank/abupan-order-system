@@ -16,27 +16,34 @@ st.markdown("""
     <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/1046/1046774.png">
     
     <style>
-    /* 1. 背景與全域文字 */
+    /* 1. 強制背景變黑 */
     .stApp { background-color: #000000 !important; }
-    body, h1, h2, h3, h4, p, span, div, li { color: #FFFFFF !important; }
-
-    /* 2. 修正輸入框 (Number Input) 的數字顏色 */
-    input { color: #000000 !important; background-color: #FFFFFF !important; }
-
-    /* 3. 修正按鈕顏色：防止加入時反白變透明 */
-    div.stButton > button {
-        background-color: #f37021 !important;
-        color: white !important;
-        border: none !important;
+    
+    /* 2. 【核心修正】強制文字顏色，確保黑底上清晰 */
+    body, p, h1, h2, h3, h4, span, div, li, label, input, button {
+        color: #FFFFFF !important; 
     }
     
-    /* 4. 強制消滅那兩個惱人的圖示 (這是 Streamlit 新版的類別) */
-    [data-testid="stToolbar"], [data-testid="stDecoration"], header { visibility: hidden !important; }
-
-    /* 5. 原有 UI 樣式 */
+    /* 3. 專門消滅 Streamlit 官方浮動圖示的 CSS (整合了你提供的精準選擇器) */
+    div[data-testid="stStatusWidget"],
+    iframe[title="Managed Hosting Toolbar"],
+    .stAppDeployButton,
+    header, 
+    footer,
+    #MainMenu {
+        display: none !important;
+        visibility: hidden !important;
+    }
+    
+    /* 4. 特殊顏色保護：警示與提示色 */
+    .sales-text-alert, .stError { color: #FF6B6B !important; }
+    .sales-text { color: #FFD93D !important; }
+    input { color: #000000 !important; background-color: #FFFFFF !important; }
+    div.stButton > button { background-color: #f37021 !important; color: white !important; }
+    
+    /* 原有 UI 優化 */
     div[data-testid="stImage"] img { height: 220px !important; object-fit: cover !important; border-radius: 8px; }
-    .sales-text { color: #FFD93D !important; font-weight: bold; }
-    .sales-text-alert { color: #FF6B6B !important; font-weight: bold; }
+    .item-id-tag { font-size: 12px; color: #AAAAAA !important; margin-bottom: 10px; }
     </style>
 """, unsafe_allow_html=True)
 
