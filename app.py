@@ -14,11 +14,20 @@ st.markdown("""
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="mobile-web-app-capable" content="yes">
     <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/1046/1046774.png">
-""", unsafe_allow_html=True)
-
-st.markdown("""
+    
     <style>
-    #MainMenu {visibility: hidden;} footer {visibility: hidden;} header {visibility: hidden;}
+    /* 1. 全域強制黑色主題 */
+    .stApp { background-color: #000000 !important; }
+    
+    /* 2. 隱藏 Streamlit 的預設浮動選單與頁尾 */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    
+    /* 3. 隱藏右上角浮動圖示 */
+    .st-emotion-cache-1jicac2 {visibility: hidden;}
+    
+    /* 原有的 UI 樣式 */
     div[data-testid="stImage"] img { height: 220px !important; object-fit: cover !important; border-radius: 8px; }
     .sales-text { font-size: 16px; color: #f37021; font-weight: bold; margin-bottom: 5px; }
     .sales-text-alert { font-size: 16px; color: #dc3545; font-weight: bold; margin-bottom: 5px; }
