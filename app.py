@@ -16,23 +16,24 @@ st.markdown("""
     <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/1046/1046774.png">
     
     <style>
-    /* 1. 全域強制黑色主題 */
+    /* 1. 強制背景變黑 */
     .stApp { background-color: #000000 !important; }
     
-    /* 2. 隱藏 Streamlit 的預設浮動選單與頁尾 */
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
+    /* 2. 【核心修正】暴力接管所有文字顏色為高亮白，確保清晰度 */
+    body, p, h1, h2, h3, h4, span, div, li, label, input, button {
+        color: #FFFFFF !important; 
+    }
     
-    /* 3. 隱藏右上角浮動圖示 */
-    .st-emotion-cache-1jicac2 {visibility: hidden;}
+    /* 3. 特殊區塊顏色修正 (讓警告色依然保持紅色) */
+    .sales-text-alert, .stError { color: #FF6B6B !important; }
+    .sales-text { color: #FFD93D !important; } /* 讓原本的橘色字體變亮黃色，在黑底更清楚 */
     
-    /* 原有的 UI 樣式 */
+    /* 4. 隱藏系統雜項 */
+    #MainMenu, footer, header, .st-emotion-cache-1jicac2 { visibility: hidden !important; }
+    
+    /* 原有的 UI 樣式保持不變 */
     div[data-testid="stImage"] img { height: 220px !important; object-fit: cover !important; border-radius: 8px; }
-    .sales-text { font-size: 16px; color: #f37021; font-weight: bold; margin-bottom: 5px; }
-    .sales-text-alert { font-size: 16px; color: #dc3545; font-weight: bold; margin-bottom: 5px; }
-    .item-id-tag { font-size: 12px; color: #6c757d; margin-bottom: 10px; }
-    h1, h2, h3 { word-break: keep-all !important; }
+    .item-id-tag { font-size: 12px; color: #AAAAAA !important; margin-bottom: 10px; }
     @media (max-width: 768px) { h1 { font-size: 28px !important; } h2 { font-size: 22px !important; } .stTabs [data-baseweb="tab"] { font-size: 14px !important; padding: 8px 12px !important; } }
     </style>
 """, unsafe_allow_html=True)
