@@ -20,13 +20,14 @@ st.markdown("""
     .stApp { background-color: #000000 !important; }
     body, h1, h2, h3, h4, p, span, div, li, label, input, button { color: #FFFFFF !important; }
 
-    /* 2. 極致暴力隱藏官方所有浮動元件 */
+    /* 2. 暴力隱藏所有官方圖示 (已加入 stDecoration 與 stStatusWidget) */
     header[data-testid="stHeader"], 
     .stAppDeployButton, 
     #MainMenu,
     footer,
     iframe[title="Managed Hosting Toolbar"],
     div[data-testid="stStatusWidget"],
+    [data-testid="stDecoration"], 
     div[class*="stStatusWidget"],
     [data-testid="stConnectionStatus"],
     div[style*="position: fixed"][style*="bottom"] {
