@@ -8,7 +8,7 @@ from bom_engine import calculate_bom
 from record_engine import save_ordered_data, load_daily_record, update_record_qty, delete_order_item, batch_update_record_qty
 from auth_engine import check_login, logout  # 🔑 新增：引入登入模組
 
-st.set_page_config(page_title="阿布潘智能出餐系統", page_icon="🐟", layout="wide")
+st.set_page_config(page_title="阿布潘員工系統", page_icon="🐟", layout="wide")
 
 # ==========================================
 # 1. 執行權限驗證攔截 (這道鎖會擋住未登入的人)
