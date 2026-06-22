@@ -16,34 +16,37 @@ st.markdown("""
     <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/1046/1046774.png">
     
     <style>
-    /* 1. 強制背景變黑 */
+    /* 1. 背景與全域文字 */
     .stApp { background-color: #000000 !important; }
-    
-    /* 2. 【核心修正】強制文字顏色，確保黑底上清晰 */
-    body, p, h1, h2, h3, h4, span, div, li, label, input, button {
-        color: #FFFFFF !important; 
-    }
-    
-    /* 3. 專門消滅 Streamlit 官方浮動圖示的 CSS (整合了你提供的精準選擇器) */
-    div[data-testid="stStatusWidget"],
-    iframe[title="Managed Hosting Toolbar"],
-    .stAppDeployButton,
-    header, 
+    body, h1, h2, h3, h4, p, span, div, li, label, input, button { color: #FFFFFF !important; }
+
+    /* 2. 極致暴力隱藏官方所有浮動元件 */
+    header[data-testid="stHeader"], 
+    .stAppDeployButton, 
+    #MainMenu,
     footer,
-    #MainMenu {
+    iframe[title="Managed Hosting Toolbar"],
+    div[data-testid="stStatusWidget"],
+    div[class*="stStatusWidget"],
+    [data-testid="stConnectionStatus"],
+    div[style*="position: fixed"][style*="bottom"] {
         display: none !important;
         visibility: hidden !important;
+        opacity: 0 !important;
+        height: 0 !important;
+        width: 0 !important;
+        pointer-events: none !important;
     }
-    
-    /* 4. 特殊顏色保護：警示與提示色 */
-    .sales-text-alert, .stError { color: #FF6B6B !important; }
-    .sales-text { color: #FFD93D !important; }
+
+    /* 3. 輸入框與按鈕特殊修復 */
     input { color: #000000 !important; background-color: #FFFFFF !important; }
-    div.stButton > button { background-color: #f37021 !important; color: white !important; }
+    div.stButton > button { background-color: #f37021 !important; color: white !important; border: none !important; }
     
-    /* 原有 UI 優化 */
+    /* 4. 原有 UI 微調 */
+    .block-container { padding-top: 2rem !important; }
     div[data-testid="stImage"] img { height: 220px !important; object-fit: cover !important; border-radius: 8px; }
-    .item-id-tag { font-size: 12px; color: #AAAAAA !important; margin-bottom: 10px; }
+    .sales-text { color: #FFD93D !important; font-weight: bold; }
+    .sales-text-alert { color: #FF6B6B !important; font-weight: bold; }
     </style>
 """, unsafe_allow_html=True)
 
