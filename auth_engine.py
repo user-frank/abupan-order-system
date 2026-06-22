@@ -30,7 +30,7 @@ def check_login():
 
     # --- 如果還沒登入，顯示這段登入表單 ---
     st.markdown("<br><br>", unsafe_allow_html=True) # 往下推一點比較好看
-    st.markdown("<h2 style='text-align: center;'>🐟 阿布潘智能出餐系統</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align: center;'>🐟 阿布潘員工系統</h2>", unsafe_allow_html=True)
     st.markdown("<p style='text-align: center; color: gray;'>請選擇所屬部門並輸入個人密碼</p>", unsafe_allow_html=True)
     
     # 讓畫面置中
