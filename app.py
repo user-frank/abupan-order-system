@@ -85,7 +85,7 @@ if is_logged_in:
             st.session_state.cart = {} 
             st.rerun()
 
-    st.title("🐟 阿布潘水產 - 智能決策系統")
+    st.title("🐟 阿布潘水產 - 管理系統")
     st.markdown("<p style='font-size: 14px; color: #888; margin-top: -15px;'>資料來源：正航 ERP 系統同步</p>", unsafe_allow_html=True)
     st.divider()
 
@@ -141,7 +141,7 @@ if is_logged_in:
                         st.rerun()
 
     def generate_line_message(target_date, note):
-        msg = f"🐟 【阿布潘營運中心 - 出餐決策指令】 🐟\n🗓️ 目標日期：{target_date}\n──────────────────\n📋 【各部門出餐明細】\n"
+        msg = f"🐟 【阿布潘營運中心 - 決策指令】 🐟\n🗓️ 目標日期：{target_date}\n──────────────────\n📋 【各部門出餐明細】\n"
         
         # 預先依照部門分類購物車
         dept_carts = {}
