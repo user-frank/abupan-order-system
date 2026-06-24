@@ -36,7 +36,8 @@ def show():
 
     st.markdown(f"#### 📋 {date_str} 出餐與回報追蹤表")
     
-    df_record = load_daily_record(date_str)
+    with st.spinner("載入戰情數據中..."):
+        df_record = load_daily_record(date_str)
     
     if df_record.empty:
         st.info(f"📅 {date_str} 尚未有任何部門送出出餐計畫。")
@@ -50,20 +51,43 @@ def show():
             display_df = df_record.copy()
             display_df['item_id'] = display_df['item_id'].astype(str).apply(lambda x: x.split('_')[0])
             
-            # 確保新欄位存在 (相容舊資料)
+            # 確保所有需要的追蹤與 POS 欄位都存在 (相容性防護)
             for col in ['plan_operator', 'plan_time', 'report_operator', 'report_time']:
-                if col not in display_df.columns:
-                    display_df[col] = "未記錄"
+                if col not in display_df.columns: display_df[col] = "未記錄"
+            if 'pos_qty' not in display_df.columns: display_df['pos_qty'] = 0
             
-            # 🌟 明確區分「建檔」與「回報」人員
+            # 確保計算欄位都是整數數字
+            display_df['ordered_qty'] = pd.to_numeric(display_df['ordered_qty'], errors='coerce').fillna(0).astype(int)
+            display_df['actual_qty'] = pd.to_numeric(display_df['actual_qty'], errors='coerce').fillna(0).astype(int)
+            display_df['pos_qty'] = pd.to_numeric(display_df['pos_qty'], errors='coerce').fillna(0).astype(int)
+
+            # 🌟 核心商業邏輯：計算差異與紅綠燈
+            def check_match(row):
+                actual = row['actual_qty']
+                pos = row['pos_qty']
+                if actual == pos:
+                    return "🟢 相符"
+                else:
+                    diff = actual - pos
+                    if diff > 0:
+                        return f"🔴 報廢 (+{diff})"
+                    else:
+                        return f"🔴 異常 ({diff})"
+
+            # 套用計算邏輯
+            display_df['match_status'] = display_df.apply(check_match, axis=1)
+            
+            # 重新排列老闆要看的欄位 (把重點數字放在中間)
             cols_to_show = {
                 'cat': '部門',
                 'item_id': '編號',
                 'name': '品名',
                 'ordered_qty': '預估出餐',
+                'actual_qty': '實際回報',
+                'pos_qty': 'POS銷售 🛒',        # 🌟 新增 POS 欄位
+                'match_status': '差異比對 ⚖️',  # 🌟 新增比對結果
                 'plan_operator': '建檔人員 📝',
                 'plan_time': '建檔時間',
-                'actual_qty': '實際回報',
                 'report_operator': '回報人員 ✅',
                 'report_time': '回報時間'
             }
@@ -73,6 +97,7 @@ def show():
                 
             display_df = display_df[list(cols_to_show.keys())].rename(columns=cols_to_show)
             
+            # 使用 dataframe 顯示
             st.dataframe(
                 display_df,
                 use_container_width=True,
