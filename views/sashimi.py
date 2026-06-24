@@ -6,7 +6,6 @@ from data_engine import load_sales_data
 from record_engine import save_ordered_data, load_daily_record, batch_update_record_qty
 from bom_engine import calculate_bom
 
-# 🌟 導入雲端設定引擎
 from config_engine import load_menu_template, save_menu_template, load_custom_items, save_custom_items
 
 def show():
@@ -33,9 +32,6 @@ def show():
         custom_df['item_id'] = custom_df['item_id'].astype(str) 
         sashimi_df = pd.concat([sashimi_df, custom_df], ignore_index=True)
 
-    # 🛡️ 【第一道防線】：強制刪除重複的編號，以最後一筆為準
-    sashimi_df = sashimi_df.drop_duplicates(subset=['item_id'], keep='last')
-    
     sashimi_df = sashimi_df.sort_values(by='item_id') 
 
     tab_plan, tab_report = st.tabs(["📝 1. 預估出餐", "✅ 2. 實際回報"])
@@ -76,7 +72,6 @@ def show():
             with st.form("menu_filter_form", border=False):
                 with st.container(height=250):
                     new_selected_ids = []
-                    # 🛡️ 【第二道防線】：加上 idx 確保每一個 Checkbox 的 Key 絕對唯一
                     for idx, opt in enumerate(all_item_options):
                         opt_id = opt.split(" - ")[0]
                         is_checked = str(opt_id) in active_item_ids
@@ -127,9 +122,6 @@ def show():
         
         display_df = sashimi_df[sashimi_df['item_id'].isin(active_item_ids)].copy()
         
-        # ==========================================
-        # 手機專屬大卡片輸入模式 (預估出餐)
-        # ==========================================
         st.markdown(f"#### 📊 出餐計畫表 (共 {len(display_df)} 項)")
         st.markdown("<p style='color: #888; font-size: 13px;'>請透過右側 ➕➖ 按鈕或直接點擊數字輸入。</p>", unsafe_allow_html=True)
         
@@ -179,7 +171,6 @@ def show():
         note = st.text_input("📝 備註事項 (人員排班或特殊交代)", placeholder="例如：切魚-阿君、開魚-阿君...", key="plan_note")
         
         if st.button("💾 確認存檔並產生 LINE 指令", type="primary", use_container_width=True, key="btn_save_plan"):
-            
             valid_items = []
             for _, row in display_df.iterrows():
                 qty = plan_qty_dict.get(row['item_id'], 0)
@@ -241,40 +232,71 @@ def show():
             st.info(f"該日生魚片部尚無任何出餐紀錄。")
         else:
             st.markdown(f"#### 📝 {date_str} 實際出餐回報表")
-            st.markdown("<p style='color: #FF6B6B; font-size: 14px;'>※ 請在下班前，將【實際出餐】欄位填妥並按下底部的儲存。</p>", unsafe_allow_html=True)
+            st.markdown("<p style='color: #FF6B6B; font-size: 14px;'>※ 請在下班前，確認【實際出餐】數量後產生 LINE 回報。</p>", unsafe_allow_html=True)
             
-            # ==========================================
-            # 手機專屬大卡片輸入模式 (實際回報)
-            # ==========================================
             actual_updates = {} 
+            report_qty_dict = {} # 用來收集 LINE 訊息需要的資料
             
             for _, row in sashimi_records.iterrows():
                 cart_key = row['cart_key']
+                ordered_qty = int(row['ordered_qty'])
                 original_qty = int(row['actual_qty'])
                 
                 with st.container(border=True):
                     col_info, col_input = st.columns([6, 4], vertical_alignment="center")
                     with col_info:
                         clean_id = str(row['item_id']).split('_')[0]
-                        st.markdown(f"<span style='font-size:16px; font-weight:bold; color:white;'>{row['name']}</span><br><span style='color:#888; font-size:13px;'>編號: {clean_id} | 預估: <span style='color:#FFD93D; font-weight:bold;'>{row['ordered_qty']} 份</span></span>", unsafe_allow_html=True)
+                        st.markdown(f"<span style='font-size:16px; font-weight:bold; color:white;'>{row['name']}</span><br><span style='color:#888; font-size:13px;'>編號: {clean_id} | 預估: <span style='color:#FFD93D; font-weight:bold;'>{ordered_qty} 份</span></span>", unsafe_allow_html=True)
                     with col_input:
                         new_qty = st.number_input(
                             "實際出餐", min_value=0, step=1, value=original_qty, 
                             key=f"report_{cart_key}", label_visibility="collapsed"
                         )
+                        
+                        report_qty_dict[cart_key] = {
+                            'name': row['name'],
+                            'ordered': ordered_qty,
+                            'actual': new_qty
+                        }
+                        
                         if str(original_qty) != str(new_qty):
                             actual_updates[cart_key] = new_qty
             
             st.markdown("<br>", unsafe_allow_html=True)
-            if st.button("💾 批次儲存今日實際出餐", type="primary", use_container_width=True, key="btn_save_report"):
-                if not actual_updates:
-                    st.warning("⚠️ 沒有偵測到任何數量的變更，無須存檔。")
-                else:
-                    current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            
+            # 🌟 【新功能】：今日加減量狀態與 LINE 回報按鈕
+            st.markdown("#### 📦 今日加減量狀態回報")
+            status_option = st.radio(
+                "請選擇今日出餐總結狀態：", 
+                ["無增減 (如預估)", "今日有加量", "今日有減量", "皆有 (部分加/部分減)"], 
+                horizontal=True,
+                key="report_status"
+            )
+            report_note = st.text_input("📝 實際回報備註 (特殊狀況說明)", placeholder="例如：今天下雨客人少，所以小甜蝦少做...", key="report_note_input")
+            
+            if st.button("💾 儲存回報並產生 LINE 指令", type="primary", use_container_width=True, key="btn_save_report"):
+                current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                
+                # 1. 存入資料庫 (只更新有修改的項目)
+                if actual_updates:
                     with st.spinner("儲存回報中..."):
                         batch_update_record_qty(date_str, actual_updates, current_user, current_time)
-                    st.success(f"✅ 實際生產量已全數批次更新成功！(回報人：{current_user})")
-                    st.rerun()
+                
+                # 2. 產生精美對齊的 LINE 訊息
+                msg = f"🐟 【阿布潘員工系統 - 生魚片部】 🐟\n🗓️ 出餐日期：{date_str}\n👨‍💻 回報人員：{current_user}\n──────────────────\n📋 【本日實際出餐數量】\n"
+                
+                for key, data in report_qty_dict.items():
+                    # 使用區塊括號法，讓數字整齊好讀
+                    msg += f"🔸 {data['name']} [預:{data['ordered']}] ➜ [實:{data['actual']}]\n"
+                    
+                msg += f"\n──────────────────\n📦 【今日加減量狀態】\n👉 {status_option}\n"
+                
+                if report_note:
+                    msg += f"💡 【備註說明】：\n{report_note}\n"
+                    
+                line_url = f"https://line.me/R/msg/text/?{urllib.parse.quote(msg)}"
+                st.success(f"✅ 實際生產量已更新！(回報人：{current_user})")
+                st.link_button("🚀 點擊這裡打開 LINE 發送至群組", url=line_url, type="primary", use_container_width=True)
 
         st.divider()
         with st.expander("➕ 補登未在預估單上的出餐品項 (下午臨時加出)"):
