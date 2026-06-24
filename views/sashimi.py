@@ -65,20 +65,32 @@ def show():
             active_item_ids = sashimi_df['item_id'].tolist()
         
         active_item_ids = [str(x) for x in active_item_ids]
-            
-        current_default_options = sashimi_df[sashimi_df['item_id'].isin(active_item_ids)]['item_id'] + " - " + sashimi_df[sashimi_df['item_id'].isin(active_item_ids)]['name']
-        current_default_options = current_default_options.tolist()
         
         with st.expander("⚙️ 系統設定：自訂常態菜單 & 新增未建檔商品"):
             st.markdown("#### 1️⃣ 隱藏 / 顯示現有商品")
-            selected_options = st.multiselect("選擇常態出餐商品：", options=all_item_options, default=current_default_options, label_visibility="collapsed", key="menu_filter")
-            if st.button("💾 儲存並更新畫面", use_container_width=True, key="btn_save_menu"):
-                new_active_ids = [opt.split(" - ")[0] for opt in selected_options]
-                with st.spinner("正在寫入雲端..."):
-                    success = save_menu_template(DEPT_NAME, new_active_ids)
-                if success:
-                    st.success("✅ 菜單已成功更新至雲端！")
-                    st.rerun()
+            st.markdown("<p style='font-size:12px;color:#888;'>打勾代表顯示，取消打勾則從下方隱藏。</p>", unsafe_allow_html=True)
+            
+            # 🌟 【完美解法】：使用 Form + 捲動容器，徹底解決鍵盤彈出問題！
+            with st.form("menu_filter_form", border=False):
+                # 建立一個高度為 250px 的捲動視窗
+                with st.container(height=250):
+                    new_selected_ids = []
+                    for opt in all_item_options:
+                        opt_id = opt.split(" - ")[0]
+                        # 判斷是否原本就有在白名單內
+                        is_checked = str(opt_id) in active_item_ids
+                        
+                        # 產生打勾框 (Checkbox)
+                        if st.checkbox(opt, value=is_checked, key=f"chk_menu_{opt_id}"):
+                            new_selected_ids.append(opt_id)
+                            
+                # 儲存按鈕放在 Form 裡面，按下去才會一次性儲存
+                if st.form_submit_button("💾 儲存並更新畫面", use_container_width=True):
+                    with st.spinner("正在寫入雲端..."):
+                        success = save_menu_template(DEPT_NAME, new_selected_ids)
+                    if success:
+                        st.success("✅ 菜單已成功更新至雲端！")
+                        st.rerun()
 
             st.divider()
             st.markdown("#### 2️⃣ 新增「ERP 尚未建檔」的新產品")
@@ -117,21 +129,19 @@ def show():
         display_df = sashimi_df[sashimi_df['item_id'].isin(active_item_ids)].copy()
         
         # ==========================================
-        # 🌟 方案 B：手機專屬大卡片輸入模式 (預估出餐)
+        # 手機專屬大卡片輸入模式 (預估出餐)
         # ==========================================
         st.markdown(f"#### 📊 出餐計畫表 (共 {len(display_df)} 項)")
         st.markdown("<p style='color: #888; font-size: 13px;'>請透過右側 ➕➖ 按鈕或直接點擊數字輸入。</p>", unsafe_allow_html=True)
         
-        plan_qty_dict = {} # 用來收集每個商品的輸入數量
+        plan_qty_dict = {} 
         
         for _, row in display_df.iterrows():
             with st.container(border=True):
-                # 利用 columns 完美切分左右，且垂直置中對齊
                 col_info, col_input = st.columns([6, 4], vertical_alignment="center")
                 with col_info:
                     st.markdown(f"<span style='font-size:16px; font-weight:bold; color:white;'>{row['name']}</span><br><span style='color:#888; font-size:12px;'>編號: {row['item_id']} | 參考均銷: {row['wd_avg']}</span>", unsafe_allow_html=True)
                 with col_input:
-                    # 給每個商品一個專屬的大輸入框
                     plan_qty_dict[row['item_id']] = st.number_input(
                         "數量", min_value=0, step=1, value=0, 
                         key=f"plan_{row['item_id']}", label_visibility="collapsed"
@@ -171,7 +181,6 @@ def show():
         
         if st.button("💾 確認存檔並產生 LINE 指令", type="primary", use_container_width=True, key="btn_save_plan"):
             
-            # 從剛剛蒐集的字典中，抓出數量大於 0 的商品
             valid_items = []
             for _, row in display_df.iterrows():
                 qty = plan_qty_dict.get(row['item_id'], 0)
@@ -184,7 +193,6 @@ def show():
                 cart_dict = {}
                 current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 
-                # 正規商品寫入
                 for item in valid_items:
                     cart_key = f"{item['item_id']}_{item['name']}"
                     cart_dict[cart_key] = {
@@ -192,7 +200,6 @@ def show():
                         'qty': item['qty'], 'operator': current_user, 'update_time': current_time 
                     }
                 
-                # 臨時商品寫入
                 for temp_item in st.session_state.sashimi_temp_items:
                     cart_key = f"{temp_item['item_id']}_{temp_item['name']}"
                     cart_dict[cart_key] = {
@@ -238,9 +245,9 @@ def show():
             st.markdown("<p style='color: #FF6B6B; font-size: 14px;'>※ 請在下班前，將【實際出餐】欄位填妥並按下底部的儲存。</p>", unsafe_allow_html=True)
             
             # ==========================================
-            # 🌟 方案 B：手機專屬大卡片輸入模式 (實際回報)
+            # 手機專屬大卡片輸入模式 (實際回報)
             # ==========================================
-            actual_updates = {} # 蒐集被修改的資料
+            actual_updates = {} 
             
             for _, row in sashimi_records.iterrows():
                 cart_key = row['cart_key']
@@ -252,12 +259,10 @@ def show():
                         clean_id = str(row['item_id']).split('_')[0]
                         st.markdown(f"<span style='font-size:16px; font-weight:bold; color:white;'>{row['name']}</span><br><span style='color:#888; font-size:13px;'>編號: {clean_id} | 預估: <span style='color:#FFD93D; font-weight:bold;'>{row['ordered_qty']} 份</span></span>", unsafe_allow_html=True)
                     with col_input:
-                        # 將預設值設定為資料庫裡紀錄的數字
                         new_qty = st.number_input(
                             "實際出餐", min_value=0, step=1, value=original_qty, 
                             key=f"report_{cart_key}", label_visibility="collapsed"
                         )
-                        # 【智慧差集判斷】：如果畫面的數字跟資料庫不一樣，就加入更新清單
                         if str(original_qty) != str(new_qty):
                             actual_updates[cart_key] = new_qty
             
