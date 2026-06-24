@@ -33,6 +33,9 @@ def show():
         custom_df['item_id'] = custom_df['item_id'].astype(str) 
         sashimi_df = pd.concat([sashimi_df, custom_df], ignore_index=True)
 
+    # 🛡️ 【第一道防線】：強制刪除重複的編號，以最後一筆為準
+    sashimi_df = sashimi_df.drop_duplicates(subset=['item_id'], keep='last')
+    
     sashimi_df = sashimi_df.sort_values(by='item_id') 
 
     tab_plan, tab_report = st.tabs(["📝 1. 預估出餐", "✅ 2. 實際回報"])
@@ -70,21 +73,17 @@ def show():
             st.markdown("#### 1️⃣ 隱藏 / 顯示現有商品")
             st.markdown("<p style='font-size:12px;color:#888;'>打勾代表顯示，取消打勾則從下方隱藏。</p>", unsafe_allow_html=True)
             
-            # 🌟 【完美解法】：使用 Form + 捲動容器，徹底解決鍵盤彈出問題！
             with st.form("menu_filter_form", border=False):
-                # 建立一個高度為 250px 的捲動視窗
                 with st.container(height=250):
                     new_selected_ids = []
-                    for opt in all_item_options:
+                    # 🛡️ 【第二道防線】：加上 idx 確保每一個 Checkbox 的 Key 絕對唯一
+                    for idx, opt in enumerate(all_item_options):
                         opt_id = opt.split(" - ")[0]
-                        # 判斷是否原本就有在白名單內
                         is_checked = str(opt_id) in active_item_ids
                         
-                        # 產生打勾框 (Checkbox)
-                        if st.checkbox(opt, value=is_checked, key=f"chk_menu_{opt_id}"):
+                        if st.checkbox(opt, value=is_checked, key=f"chk_menu_{opt_id}_{idx}"):
                             new_selected_ids.append(opt_id)
                             
-                # 儲存按鈕放在 Form 裡面，按下去才會一次性儲存
                 if st.form_submit_button("💾 儲存並更新畫面", use_container_width=True):
                     with st.spinner("正在寫入雲端..."):
                         success = save_menu_template(DEPT_NAME, new_selected_ids)
