@@ -32,7 +32,6 @@ def _sync_sheet(sheet, df, default_headers):
             body = df_safe.astype(str).values.tolist()
             data = [headers] + body
             
-        # 兼容 gspread 新舊版本的寫入寫法
         try:
             sheet.update('A1', data)
         except:
@@ -40,12 +39,14 @@ def _sync_sheet(sheet, df, default_headers):
         return True
     except Exception as e:
         st.error(f"❌ 寫入 Google Sheets 失敗: {str(e)}")
-        st.stop() # 遇到錯誤強制停止，讓你看到報錯！
+        st.stop() 
         return False
 
 # ==========================================
-# 1. 常態菜單 (白名單) 存取 - 依部門隔離
+# 1. 常態菜單 (白名單) 存取 
 # ==========================================
+# 🌟 神器在這裡：把讀取結果記在記憶體 1 個小時，大幅減少 API 請求！
+@st.cache_data(ttl=3600, show_spinner=False)
 def load_menu_template(dept_name):
     headers = ["部門", "item_id"]
     sheet = _get_worksheet("設定_常態菜單", headers)
@@ -72,15 +73,23 @@ def save_menu_template(dept_name, item_ids):
             if df.empty: df = pd.DataFrame(new_rows)
             else: df = pd.concat([df, pd.DataFrame(new_rows)], ignore_index=True)
             
-        return _sync_sheet(sheet, df, headers)
+        success = _sync_sheet(sheet, df, headers)
+        
+        # 🌟 寫入成功後，立刻把大腦裡的舊記憶刪除，這樣下次畫面重整就會去抓最新的！
+        if success:
+            load_menu_template.clear() 
+            
+        return success
     except Exception as e:
         st.error(f"❌ 儲存常態菜單失敗: {e}")
         st.stop()
         return False
 
 # ==========================================
-# 2. 自訂商品 (新產品) 存取 - 依部門隔離
+# 2. 自訂商品 (新產品) 存取 
 # ==========================================
+# 🌟 神器在這裡：快取自訂商品清單
+@st.cache_data(ttl=3600, show_spinner=False)
 def load_custom_items(dept_name):
     headers = ["部門", "item_id", "品名"]
     sheet = _get_worksheet("設定_自訂商品", headers)
@@ -107,7 +116,13 @@ def save_custom_items(dept_name, items):
             if df.empty: df = pd.DataFrame(new_rows)
             else: df = pd.concat([df, pd.DataFrame(new_rows)], ignore_index=True)
             
-        return _sync_sheet(sheet, df, headers)
+        success = _sync_sheet(sheet, df, headers)
+        
+        # 🌟 寫入成功後，清除快取
+        if success:
+            load_custom_items.clear()
+            
+        return success
     except Exception as e:
         st.error(f"❌ 儲存自訂商品過程發生錯誤: {e}")
         st.stop()
