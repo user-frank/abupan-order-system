@@ -81,14 +81,14 @@ def show():
                             new_selected_ids.append(opt_id)
                             
                 if st.form_submit_button("💾 儲存並更新畫面", use_container_width=True):
-                    with st.spinner("正在寫入雲端..."):
+                    with st.spinner("正在寫入..."):
                         success = save_menu_template(DEPT_NAME, new_selected_ids)
                     if success:
-                        st.success("✅ 菜單已成功更新至雲端！")
+                        st.success("✅ 菜單已成功更新！")
                         st.rerun()
 
             st.divider()
-            st.markdown("#### 2️⃣ 新增「ERP 尚未建檔」的新產品")
+            st.markdown("#### 2️⃣ 新增新產品")
             col_id, col_name, col_btn = st.columns([2, 4, 2])
             with col_id: new_c_id = st.text_input("自訂編號 (選填)", placeholder="例: N001", key="new_c_id")
             with col_name: new_c_name = st.text_input("新商品名稱 (必填)", placeholder="例: 炙燒特選黑鮪", key="new_c_name")
@@ -107,7 +107,7 @@ def show():
                             c_list = load_custom_items(DEPT_NAME)
                             c_list.append({"item_id": final_id, "name": new_c_name})
                             
-                            with st.spinner(f"正在將 {new_c_name} 寫入 Google 試算表..."):
+                            with st.spinner(f"正在將 {new_c_name} 寫入 ..."):
                                 success1 = save_custom_items(DEPT_NAME, c_list)
                                 
                                 active_list = load_menu_template(DEPT_NAME) or []
@@ -118,7 +118,7 @@ def show():
                                     success2 = True
                                     
                             if success1 and success2:
-                                st.success(f"✅ {new_c_name} 已成功加入雲端！")
+                                st.success(f"✅ {new_c_name} 已成功加入！")
                                 st.rerun()
         
         display_df = sashimi_df[sashimi_df['item_id'].isin(active_item_ids)].copy()
@@ -286,7 +286,7 @@ def show():
                         batch_update_record_qty(date_str, actual_updates, current_user, current_time)
                 
                 # 🌟 【終極排版升級】：兩行跳格法 + 紅綠燈 + @老闆
-                msg = f"🐟 【阿布潘員工系統 - 生魚片部】 🐟\n🗓️ 出餐日期：{date_str}\n👨‍💻 回報人員：{current_user}\n──────────────────\n📋 【本日實際出餐數量】\n"
+                msg = f"🐟 【阿布潘-生魚片部】 🐟\n🗓️ 出餐日期：{date_str}\n👨‍💻 回報人員：{current_user}\n──────────────────\n📋 【本日實際出餐數量】\n"
                 
                 # 準備兩個清單來做分類
                 green_list = []
