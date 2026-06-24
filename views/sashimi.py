@@ -6,29 +6,25 @@ from data_engine import load_sales_data
 from record_engine import save_ordered_data, load_daily_record, batch_update_record_qty
 from bom_engine import calculate_bom
 
-# 🌟 導入雲端設定引擎
 from config_engine import load_menu_template, save_menu_template, load_custom_items, save_custom_items
 
 def show():
     current_user = st.session_state.get("user_name", "未知操作員")
     DEPT_NAME = "生魚片" 
     
-    # 【修復 1】將 today 移到最上方，確保所有分頁都能讀取到
     today = datetime.date.today() 
     
     st.markdown("### 🔪 生魚片部 - 專屬工作區")
     st.markdown("<p style='color: #888; margin-top: -10px; font-size: 14px;'>請直接在表格的【預估數量】或【實際出餐】欄位中輸入數字。</p>", unsafe_allow_html=True)
     
-    # 讀取 ERP 商品
     df, _ = load_sales_data()
     if df.empty:
-        st.warning("⚠️ 無法讀取 ERP 商品資料。")
+        st.warning("⚠️ 無法讀取 商品資料。")
         return
         
     sashimi_df = df[df['cat'] == '生魚片'].copy()
     sashimi_df['item_id'] = sashimi_df['item_id'].astype(str)
 
-    # 讀取雲端自訂新產品
     custom_items = load_custom_items(DEPT_NAME)
     if custom_items:
         custom_df = pd.DataFrame(custom_items)
@@ -57,7 +53,6 @@ def show():
             date_options.append(label)
             date_mapping[label] = d.strftime("%Y-%m-%d")
 
-        # 【修復 2】所有元件加上 key
         selected_date_label = st.selectbox("📌 選擇出餐日期", date_options, key="plan_date")
         target_date_str = date_mapping[selected_date_label]
         
@@ -79,14 +74,14 @@ def show():
             selected_options = st.multiselect("選擇常態出餐商品：", options=all_item_options, default=current_default_options, label_visibility="collapsed", key="menu_filter")
             if st.button("💾 儲存並更新表格", use_container_width=True, key="btn_save_menu"):
                 new_active_ids = [opt.split(" - ")[0] for opt in selected_options]
-                with st.spinner("正在寫入雲端..."):
+                with st.spinner("正在寫入..."):
                     success = save_menu_template(DEPT_NAME, new_active_ids)
                 if success:
-                    st.success("✅ 菜單已成功更新至雲端！")
+                    st.success("✅ 菜單已成功更新！")
                     st.rerun()
 
             st.divider()
-            st.markdown("#### 2️⃣ 新增「ERP 尚未建檔」的新產品")
+            st.markdown("#### 2️⃣ 新增新產品")
             col_id, col_name, col_btn = st.columns([2, 4, 2])
             with col_id: new_c_id = st.text_input("自訂編號 (選填)", placeholder="例: N001", key="new_c_id")
             with col_name: new_c_name = st.text_input("新商品名稱 (必填)", placeholder="例: 炙燒特選黑鮪", key="new_c_name")
@@ -105,7 +100,7 @@ def show():
                             c_list = load_custom_items(DEPT_NAME)
                             c_list.append({"item_id": final_id, "name": new_c_name})
                             
-                            with st.spinner(f"正在將 {new_c_name} 寫入 Google 試算表..."):
+                            with st.spinner(f"正在將 {new_c_name} 寫入 ..."):
                                 success1 = save_custom_items(DEPT_NAME, c_list)
                                 
                                 active_list = load_menu_template(DEPT_NAME) or []
@@ -116,26 +111,27 @@ def show():
                                     success2 = True
                                     
                             if success1 and success2:
-                                st.success(f"✅ {new_c_name} 已成功加入雲端！")
+                                st.success(f"✅ {new_c_name} 已成功加入！")
                                 st.rerun()
         
         display_df = sashimi_df[sashimi_df['item_id'].isin(active_item_ids)].copy()
         
-        editor_df = display_df[['item_id', 'name', 'wd_avg']].copy()
+        # 💡 【修改點 1】：移除 'wd_avg' (參考)，只留下編號和品名
+        editor_df = display_df[['item_id', 'name']].copy()
         editor_df['預估數量'] = 0
-        editor_df = editor_df.rename(columns={'item_id': '編號', 'name': '品名', 'wd_avg': '參考'})
+        editor_df = editor_df.rename(columns={'item_id': '編號', 'name': '品名'})
         
         st.markdown(f"#### 📊 出餐計畫表 (共 {len(editor_df)} 項)")
         edited_df = st.data_editor(
             editor_df,
             hide_index=True,
             use_container_width=True,
-            key="plan_editor",  # 🔑 極度重要：綁定專屬 ID
+            key="plan_editor", 
             column_config={
-                "編號": st.column_config.TextColumn("編號", disabled=True),
-                "品名": st.column_config.TextColumn("品名", disabled=True),
-                "參考": st.column_config.NumberColumn("參考", disabled=True),
-                "預估數量": st.column_config.NumberColumn("預估數量 ✍️", min_value=0, step=1, format="%d")
+                # 💡 【修改點 2】：在這裡調整寬度！你可以把 width=數字 隨意改成你喜歡的大小
+                "編號": st.column_config.TextColumn("編號", disabled=True, width=80), 
+                "品名": st.column_config.TextColumn("品名", disabled=True, width="medium"), 
+                "預估數量": st.column_config.NumberColumn("預估數量 ✍️", min_value=0, step=1, format="%d", width="large") # 設定 large 會讓輸入框在手機上變大
             }
         )
         
@@ -197,7 +193,7 @@ def show():
                 with st.spinner("訂單存檔中..."):
                     save_ordered_data(target_date_str, cart_dict)
                 
-                msg = f"🐟 【阿布潘員工系統 - 生魚片部】 🐟\n🗓️ 出餐日期：{target_date_str}\n👨‍💻 填表人員：{current_user}\n──────────────────\n📋 【預估出餐明細】\n"
+                msg = f"🐟 【阿布潘-生魚片部】 🐟\n🗓️ 出餐日期：{target_date_str}\n👨‍💻 填表人員：{current_user}\n──────────────────\n📋 【預估出餐明細】\n"
                 for _, data in cart_dict.items():
                     msg += f"🔸 {data['name']} ➜ {data['qty']} 份\n"
                 
@@ -239,22 +235,21 @@ def show():
                 report_df,
                 hide_index=True,
                 use_container_width=True,
-                key="report_editor",  # 🔑 極度重要：與分頁1隔開，防止當機
+                key="report_editor", 
                 column_config={
                     "cart_key": None, 
-                    "編號": st.column_config.TextColumn("編號", disabled=True),
-                    "品名": st.column_config.TextColumn("品名", disabled=True),
-                    "預估數量": st.column_config.NumberColumn("預估數量", disabled=True),
-                    "實際出餐": st.column_config.NumberColumn("實際出餐 ✍️", min_value=0, step=1, format="%d")
+                    # 💡 【修改點 3】：在這裡調整回報表格的寬度！
+                    "編號": st.column_config.TextColumn("編號", disabled=True, width=80), # 把編號壓小
+                    "品名": st.column_config.TextColumn("品名", disabled=True, width="medium"), 
+                    "預估數量": st.column_config.NumberColumn("預估數量", disabled=True, width=80), # 預估數量壓小
+                    "實際出餐": st.column_config.NumberColumn("實際出餐 ✍️", min_value=0, step=1, format="%d", width="large") # 放大實際出餐欄位
                 }
             )
             
             st.markdown("<br>", unsafe_allow_html=True)
             if st.button("💾 批次儲存今日實際出餐", type="primary", use_container_width=True, key="btn_save_report"):
                 actual_updates = {}
-                # 🌟 【智慧追蹤】：只抓取「被這個人修改過」的數字
                 for idx, row in edited_report_df.iterrows():
-                    # 【修復 Bug】改用 .loc 透過真實索引精準定位，避免 out-of-bounds
                     original_qty = report_df.loc[idx, '實際出餐']
                     new_qty = row['實際出餐']
                     
