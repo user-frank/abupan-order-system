@@ -13,6 +13,9 @@ def show():
     current_user = st.session_state.get("user_name", "未知操作員")
     DEPT_NAME = "生魚片" 
     
+    # 【修復 1】將 today 移到最上方，確保所有分頁都能讀取到
+    today = datetime.date.today() 
+    
     st.markdown("### 🔪 生魚片部 - 專屬工作區")
     st.markdown("<p style='color: #888; margin-top: -10px; font-size: 14px;'>請直接在表格的【預估數量】或【實際出餐】欄位中輸入數字。</p>", unsafe_allow_html=True)
     
@@ -42,7 +45,6 @@ def show():
     # 分頁 1：預估出餐
     # ==========================================
     with tab_plan:
-        today = datetime.date.today()
         date_options = []
         date_mapping = {} 
         for i in range(0, 7):
@@ -55,7 +57,8 @@ def show():
             date_options.append(label)
             date_mapping[label] = d.strftime("%Y-%m-%d")
 
-        selected_date_label = st.selectbox("📌 選擇出餐日期", date_options)
+        # 【修復 2】所有元件加上 key
+        selected_date_label = st.selectbox("📌 選擇出餐日期", date_options, key="plan_date")
         target_date_str = date_mapping[selected_date_label]
         
         st.divider()
@@ -73,23 +76,23 @@ def show():
         
         with st.expander("⚙️ 系統設定：自訂常態菜單 & 新增未建檔商品"):
             st.markdown("#### 1️⃣ 隱藏 / 顯示現有商品")
-            selected_options = st.multiselect("選擇常態出餐商品：", options=all_item_options, default=current_default_options, label_visibility="collapsed")
-            if st.button("💾 儲存並更新表格", use_container_width=True):
+            selected_options = st.multiselect("選擇常態出餐商品：", options=all_item_options, default=current_default_options, label_visibility="collapsed", key="menu_filter")
+            if st.button("💾 儲存並更新表格", use_container_width=True, key="btn_save_menu"):
                 new_active_ids = [opt.split(" - ")[0] for opt in selected_options]
                 with st.spinner("正在寫入雲端..."):
                     success = save_menu_template(DEPT_NAME, new_active_ids)
                 if success:
-                    st.success("✅ 菜單已成功更新！")
+                    st.success("✅ 菜單已成功更新至雲端！")
                     st.rerun()
 
             st.divider()
-            st.markdown("#### 2️⃣ 新增新產品")
+            st.markdown("#### 2️⃣ 新增「ERP 尚未建檔」的新產品")
             col_id, col_name, col_btn = st.columns([2, 4, 2])
-            with col_id: new_c_id = st.text_input("自訂編號 (選填)", placeholder="例: N001")
-            with col_name: new_c_name = st.text_input("新商品名稱 (必填)", placeholder="例: 炙燒特選黑鮪")
+            with col_id: new_c_id = st.text_input("自訂編號 (選填)", placeholder="例: N001", key="new_c_id")
+            with col_name: new_c_name = st.text_input("新商品名稱 (必填)", placeholder="例: 炙燒特選黑鮪", key="new_c_name")
             with col_btn:
                 st.markdown("<div style='margin-top:28px;'></div>", unsafe_allow_html=True)
-                if st.button("➕ 永久加入系統", type="primary", use_container_width=True):
+                if st.button("➕ 永久加入系統", type="primary", use_container_width=True, key="btn_add_custom"):
                     if not new_c_name.strip():
                         st.error("商品名稱不能為空！")
                     else:
@@ -102,7 +105,7 @@ def show():
                             c_list = load_custom_items(DEPT_NAME)
                             c_list.append({"item_id": final_id, "name": new_c_name})
                             
-                            with st.spinner(f"正在將 {new_c_name} 寫入 ..."):
+                            with st.spinner(f"正在將 {new_c_name} 寫入 Google 試算表..."):
                                 success1 = save_custom_items(DEPT_NAME, c_list)
                                 
                                 active_list = load_menu_template(DEPT_NAME) or []
@@ -113,7 +116,7 @@ def show():
                                     success2 = True
                                     
                             if success1 and success2:
-                                st.success(f"✅ {new_c_name} 已成功加入！")
+                                st.success(f"✅ {new_c_name} 已成功加入雲端！")
                                 st.rerun()
         
         display_df = sashimi_df[sashimi_df['item_id'].isin(active_item_ids)].copy()
@@ -127,6 +130,7 @@ def show():
             editor_df,
             hide_index=True,
             use_container_width=True,
+            key="plan_editor",  # 🔑 極度重要：綁定專屬 ID
             column_config={
                 "編號": st.column_config.TextColumn("編號", disabled=True),
                 "品名": st.column_config.TextColumn("品名", disabled=True),
@@ -144,7 +148,7 @@ def show():
             with col2: temp_name = st.text_input("品名 (必填)", key="s_temp_name", placeholder="例如: 鮭魚去鱗特製版")
             with col3: temp_qty = st.number_input("數量", min_value=1, step=1, key="s_temp_qty")
             
-            if st.button("➕ 加入本次訂單", use_container_width=True):
+            if st.button("➕ 加入本次訂單", use_container_width=True, key="btn_add_temp"):
                 if temp_name.strip() == "":
                     st.error("品名不能為空！")
                 else:
@@ -160,14 +164,14 @@ def show():
             st.markdown("##### 🛒 本次額外客製化清單")
             for idx, item in enumerate(st.session_state.sashimi_temp_items):
                 st.markdown(f"- {item['name']} ➜ **{item['qty']} 份**")
-            if st.button("🗑️ 清除客製化清單", size="small"):
+            if st.button("🗑️ 清除客製化清單", size="small", key="btn_clear_temp"):
                 st.session_state.sashimi_temp_items = []
                 st.rerun()
             st.markdown("</div><br>", unsafe_allow_html=True)
 
-        note = st.text_input("📝 備註事項 (人員排班或特殊交代)", placeholder="例如：切魚-阿君、開魚-阿君...")
+        note = st.text_input("📝 備註事項 (人員排班或特殊交代)", placeholder="例如：切魚-阿君、開魚-阿君...", key="plan_note")
         
-        if st.button("💾 確認存檔並產生 LINE 指令", type="primary", use_container_width=True):
+        if st.button("💾 確認存檔並產生 LINE 指令", type="primary", use_container_width=True, key="btn_save_plan"):
             valid_items = edited_df[edited_df['預估數量'] > 0]
             
             if valid_items.empty and not st.session_state.sashimi_temp_items:
@@ -193,7 +197,7 @@ def show():
                 with st.spinner("訂單存檔中..."):
                     save_ordered_data(target_date_str, cart_dict)
                 
-                msg = f"🐟 【阿布潘 - 生魚片部】 🐟\n🗓️ 出餐日期：{target_date_str}\n👨‍💻 填表人員：{current_user}\n──────────────────\n📋 【預估出餐明細】\n"
+                msg = f"🐟 【阿布潘員工系統 - 生魚片部】 🐟\n🗓️ 出餐日期：{target_date_str}\n👨‍💻 填表人員：{current_user}\n──────────────────\n📋 【預估出餐明細】\n"
                 for _, data in cart_dict.items():
                     msg += f"🔸 {data['name']} ➜ {data['qty']} 份\n"
                 
@@ -211,4 +215,82 @@ def show():
 
     # ==========================================
     # 分頁 2：實際回報
-    # ======================
+    # ==========================================
+    with tab_report:
+        report_date = st.date_input("📌 選擇回報日期", value=today, key="report_date")
+        date_str = report_date.strftime("%Y-%m-%d")
+        
+        with st.spinner("讀取回報紀錄中..."):
+            df_record = load_daily_record(date_str)
+            
+        sashimi_records = df_record[df_record['cat'] == '生魚片'].copy() if not df_record.empty else pd.DataFrame()
+        
+        if sashimi_records.empty:
+            st.info(f"該日生魚片部尚無任何出餐紀錄。")
+        else:
+            st.markdown(f"#### 📝 {date_str} 實際出餐回報表")
+            st.markdown("<p style='color: #FF6B6B; font-size: 14px;'>※ 請在下班前，將【實際出餐】欄位填妥並按下底部的儲存。</p>", unsafe_allow_html=True)
+            
+            sashimi_records['item_id_clean'] = sashimi_records['item_id'].astype(str).apply(lambda x: x.split('_')[0])
+            report_df = sashimi_records[['item_id_clean', 'name', 'ordered_qty', 'actual_qty', 'cart_key']].copy()
+            report_df = report_df.rename(columns={'item_id_clean': '編號', 'name': '品名', 'ordered_qty': '預估數量', 'actual_qty': '實際出餐'})
+            
+            edited_report_df = st.data_editor(
+                report_df,
+                hide_index=True,
+                use_container_width=True,
+                key="report_editor",  # 🔑 極度重要：與分頁1隔開，防止當機
+                column_config={
+                    "cart_key": None, 
+                    "編號": st.column_config.TextColumn("編號", disabled=True),
+                    "品名": st.column_config.TextColumn("品名", disabled=True),
+                    "預估數量": st.column_config.NumberColumn("預估數量", disabled=True),
+                    "實際出餐": st.column_config.NumberColumn("實際出餐 ✍️", min_value=0, step=1, format="%d")
+                }
+            )
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            if st.button("💾 批次儲存今日實際出餐", type="primary", use_container_width=True, key="btn_save_report"):
+                actual_updates = {}
+                for idx, row in edited_report_df.iterrows():
+                    original_qty = report_df.iloc[idx]['實際出餐']
+                    new_qty = row['實際出餐']
+                    if str(original_qty) != str(new_qty):
+                        actual_updates[row['cart_key']] = new_qty
+                        
+                if not actual_updates:
+                    st.warning("⚠️ 沒有偵測到任何數量的變更，無須存檔。")
+                else:
+                    current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    with st.spinner("儲存回報中..."):
+                        batch_update_record_qty(date_str, actual_updates, current_user, current_time)
+                    st.success(f"✅ 實際生產量已全數批次更新成功！(回報人：{current_user})")
+                    st.rerun()
+
+        st.divider()
+        with st.expander("➕ 補登未在預估單上的出餐品項 (下午臨時加出)"):
+            st.markdown("<span style='font-size:12px;color:#888;'>如果下午有出餐，但早上的預估單裡面沒有這個品項，請在這裡補登。</span>", unsafe_allow_html=True)
+            
+            all_sashimi_options = (sashimi_df['item_id'] + " - " + sashimi_df['name']).tolist()
+            ad_hoc_opt = st.selectbox("選擇臨時加出的品項", all_sashimi_options, key="adhoc_sel")
+            ad_hoc_qty = st.number_input("實際出餐數量", min_value=1, step=1, key="adhoc_qty")
+            
+            if st.button("➕ 立即補登至今日回報單", use_container_width=True, key="btn_add_adhoc"):
+                ad_id = ad_hoc_opt.split(" - ")[0]
+                ad_name = ad_hoc_opt.split(" - ")[1]
+                ad_cart_key = f"{ad_id}_{ad_name}"
+                current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                
+                adhoc_dict = {
+                    ad_cart_key: {
+                        'item_id': ad_id, 'name': ad_name, 'cat': '生魚片',
+                        'qty': 0, 
+                        'operator': current_user, 'update_time': current_time
+                    }
+                }
+                with st.spinner("補登中..."):
+                    save_ordered_data(date_str, adhoc_dict)
+                    batch_update_record_qty(date_str, {ad_cart_key: ad_hoc_qty}, current_user, current_time)
+                
+                st.success(f"✅ {ad_name} 補登成功！")
+                st.rerun()
