@@ -70,9 +70,9 @@ def show():
                 else:
                     diff = actual - pos
                     if diff > 0:
-                        return f"🔴 報廢 (+{diff})"
+                        return f"🔴 較多 (+{diff})"
                     else:
-                        return f"🔴 異常 ({diff})"
+                        return f"🔴 短少 ({diff})"
 
             # 套用計算邏輯
             display_df['match_status'] = display_df.apply(check_match, axis=1)
