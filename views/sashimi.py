@@ -205,7 +205,7 @@ def show():
                 with st.spinner("訂單存檔中..."):
                     save_ordered_data(target_date_str, cart_dict)
                 
-                msg = f"🐟 【阿布潘員工系統 - 生魚片部】 🐟\n🗓️ 出餐日期：{target_date_str}\n👨‍💻 填表人員：{current_user}\n──────────────────\n📋 【預估出餐明細】\n"
+                msg = f"🐟 【阿布潘-生魚片部】 🐟\n🗓️ 出餐日期：{target_date_str}\n👨‍💻 填表人員：{current_user}\n──────────────────\n📋 【預估出餐明細】\n"
                 for _, data in cart_dict.items():
                     msg += f"🔸 {data['name']} ➜ {data['qty']} 份\n"
                 
@@ -237,7 +237,7 @@ def show():
             st.info(f"該日生魚片部尚無任何出餐紀錄。")
         else:
             st.markdown(f"#### 📝 {date_str} 實際出餐回報表")
-            st.markdown("<p style='color: #FF6B6B; font-size: 14px;'>※ 請在下班前，確認【實際出餐】數量後產生 LINE 回報。</p>", unsafe_allow_html=True)
+            st.markdown("<p style='color: #FF6B6B; font-size: 14px;'>※ 請在今日，確認【實際出餐】數量後產生 LINE 回報。</p>", unsafe_allow_html=True)
             
             actual_updates = {} 
             report_qty_dict = {} 
@@ -286,7 +286,7 @@ def show():
                         batch_update_record_qty(date_str, actual_updates, current_user, current_time)
                 
                 # 🌟 【終極排版升級】：兩行跳格法 + 紅綠燈 + @老闆
-                msg = f"🐟 【阿布潘員工系統 - 生魚片部】 🐟\n🗓️ 出餐日期：{date_str}\n👨‍💻 回報人員：{current_user}\n📢 @老闆\n──────────────────\n📋 【本日實際出餐數量】\n"
+                msg = f"🐟 【阿布潘員工系統 - 生魚片部】 🐟\n🗓️ 出餐日期：{date_str}\n👨‍💻 回報人員：{current_user}\n──────────────────\n📋 【本日實際出餐數量】\n"
                 
                 for key, data in report_qty_dict.items():
                     o_qty = data['ordered']
