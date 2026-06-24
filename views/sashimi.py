@@ -6,6 +6,7 @@ from data_engine import load_sales_data
 from record_engine import save_ordered_data, load_daily_record, batch_update_record_qty
 from bom_engine import calculate_bom
 
+# 🌟 導入雲端設定引擎
 from config_engine import load_menu_template, save_menu_template, load_custom_items, save_custom_items
 
 def show():
@@ -122,6 +123,9 @@ def show():
         
         display_df = sashimi_df[sashimi_df['item_id'].isin(active_item_ids)].copy()
         
+        # ==========================================
+        # 手機專屬大卡片輸入模式 (預估出餐)
+        # ==========================================
         st.markdown(f"#### 📊 出餐計畫表 (共 {len(display_df)} 項)")
         st.markdown("<p style='color: #888; font-size: 13px;'>請透過右側 ➕➖ 按鈕或直接點擊數字輸入。</p>", unsafe_allow_html=True)
         
@@ -171,6 +175,7 @@ def show():
         note = st.text_input("📝 備註事項 (人員排班或特殊交代)", placeholder="例如：切魚-阿君、開魚-阿君...", key="plan_note")
         
         if st.button("💾 確認存檔並產生 LINE 指令", type="primary", use_container_width=True, key="btn_save_plan"):
+            
             valid_items = []
             for _, row in display_df.iterrows():
                 qty = plan_qty_dict.get(row['item_id'], 0)
@@ -235,7 +240,7 @@ def show():
             st.markdown("<p style='color: #FF6B6B; font-size: 14px;'>※ 請在下班前，確認【實際出餐】數量後產生 LINE 回報。</p>", unsafe_allow_html=True)
             
             actual_updates = {} 
-            report_qty_dict = {} # 用來收集 LINE 訊息需要的資料
+            report_qty_dict = {} 
             
             for _, row in sashimi_records.iterrows():
                 cart_key = row['cart_key']
@@ -264,7 +269,6 @@ def show():
             
             st.markdown("<br>", unsafe_allow_html=True)
             
-            # 🌟 【新功能】：今日加減量狀態與 LINE 回報按鈕
             st.markdown("#### 📦 今日加減量狀態回報")
             status_option = st.radio(
                 "請選擇今日出餐總結狀態：", 
@@ -277,17 +281,26 @@ def show():
             if st.button("💾 儲存回報並產生 LINE 指令", type="primary", use_container_width=True, key="btn_save_report"):
                 current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 
-                # 1. 存入資料庫 (只更新有修改的項目)
                 if actual_updates:
                     with st.spinner("儲存回報中..."):
                         batch_update_record_qty(date_str, actual_updates, current_user, current_time)
                 
-                # 2. 產生精美對齊的 LINE 訊息
-                msg = f"🐟 【阿布潘員工系統 - 生魚片部】 🐟\n🗓️ 出餐日期：{date_str}\n👨‍💻 回報人員：{current_user}\n──────────────────\n📋 【本日實際出餐數量】\n"
+                # 🌟 【終極排版升級】：兩行跳格法 + 紅綠燈 + @老闆
+                msg = f"🐟 【阿布潘員工系統 - 生魚片部】 🐟\n🗓️ 出餐日期：{date_str}\n👨‍💻 回報人員：{current_user}\n📢 @老闆\n──────────────────\n📋 【本日實際出餐數量】\n"
                 
                 for key, data in report_qty_dict.items():
-                    # 使用區塊括號法，讓數字整齊好讀
-                    msg += f"🔸 {data['name']} [預:{data['ordered']}] ➜ [實:{data['actual']}]\n"
+                    o_qty = data['ordered']
+                    a_qty = data['actual']
+                    
+                    # 判斷紅綠燈
+                    if str(o_qty) == str(a_qty):
+                        icon = "🟢"
+                    else:
+                        icon = "🔴"
+                        
+                    # 兩行跳格排版 (使用全形空白確保對齊)
+                    msg += f"{icon} {data['name']}\n"
+                    msg += f"　 預估出餐 {o_qty} 份 / 實際 {a_qty} 份\n"
                     
                 msg += f"\n──────────────────\n📦 【今日加減量狀態】\n👉 {status_option}\n"
                 
