@@ -90,7 +90,7 @@ if is_logged_in:
     st.divider() # 畫一條分隔線
     
     # --- 根據部門轉接房間 ---
-    if current_dept == "總管理處":
+    if current_dept == "總管理":
         from views import boss
         boss.show()
         
