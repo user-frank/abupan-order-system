@@ -2,15 +2,33 @@ import streamlit as st
 import pandas as pd
 import datetime
 import urllib.parse
+import json
+import os
 from data_engine import load_sales_data
 from record_engine import save_ordered_data, load_daily_record, batch_update_record_qty
 from bom_engine import calculate_bom
 
+# 建立一個存放該部門菜單偏好設定的檔案路徑
+TEMPLATE_FILE = "sashimi_menu_template.json"
+
+def load_menu_template():
+    """讀取儲存的菜單偏好，如果沒有則回傳 None"""
+    if os.path.exists(TEMPLATE_FILE):
+        try:
+            with open(TEMPLATE_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except:
+            return None
+    return None
+
+def save_menu_template(item_ids):
+    """儲存使用者的菜單偏好"""
+    with open(TEMPLATE_FILE, "w", encoding="utf-8") as f:
+        json.dump(item_ids, f, ensure_ascii=False)
+
 def show():
-    # 1. 取得目前操作人員 (作為紀錄追蹤用)
     current_user = st.session_state.get("user_name", "未知操作員")
     
-    # 2. 房間標題 (改用 H3，字體小一點點)
     st.markdown("### 🔪 生魚片部 - 專屬工作區")
     st.markdown("<p style='color: #888; margin-top: -10px; font-size: 14px;'>請直接在表格的【預估數量】或【實際出餐】欄位中輸入數字。</p>", unsafe_allow_html=True)
     
@@ -28,7 +46,6 @@ def show():
     # 分頁 1：早班預估出餐
     # ==========================================
     with tab_plan:
-        # 3. 恢復完美的 7 天日期選單
         today = datetime.date.today()
         date_options = []
         date_mapping = {} 
@@ -47,11 +64,48 @@ def show():
         
         st.divider()
         
-        editor_df = sashimi_df[['item_id', 'name', 'wd_avg']].copy()
-        editor_df['預估數量'] = 0
-        editor_df = editor_df.rename(columns={'item_id': '編號', 'name': '品名', 'wd_avg': '平日均銷(參考)'})
+        # ------------------------------------------
+        # 🌟 新功能：常態菜單過濾器 (新增/移除邏輯)
+        # ------------------------------------------
+        # 準備選單用的所有選項 (格式: "80001 - 特選鮭魚")
+        all_item_options = (sashimi_df['item_id'] + " - " + sashimi_df['name']).tolist()
         
-        st.markdown("#### 📊 出餐計畫表")
+        # 讀取先前的設定，如果沒有，預設顯示全部商品
+        active_item_ids = load_menu_template()
+        if active_item_ids is None:
+            active_item_ids = sashimi_df['item_id'].tolist()
+            
+        # 找出目前要打勾的選項
+        current_default_options = sashimi_df[sashimi_df['item_id'].isin(active_ids)]['item_id'] + " - " + sashimi_df[sashimi_df['item_id'].isin(active_ids)]['name']
+        current_default_options = current_default_options.tolist()
+        
+        with st.expander("⚙️ 自訂常態出餐菜單 (點此新增/移除表格品項)"):
+            st.markdown("💡 **提示：** 在這裡移除的品項不會刪除 ERP 資料，只是在下方的表格中「隱藏」起來，讓點單畫面更乾淨。")
+            
+            selected_options = st.multiselect(
+                "選擇這個月常態出餐的商品：",
+                options=all_item_options,
+                default=current_default_options
+            )
+            
+            if st.button("💾 更新表格畫面", use_container_width=True):
+                # 把 "80001 - 特選鮭魚" 轉回 "80001"
+                new_active_ids = [opt.split(" - ")[0] for opt in selected_options]
+                save_menu_template(new_active_ids)
+                st.success("✅ 菜單已更新！正在重新載入表格...")
+                st.rerun()
+
+        # 過濾出要顯示在表格裡的資料
+        display_df = sashimi_df[sashimi_df['item_id'].isin(active_item_ids)].copy()
+        
+        # ------------------------------------------
+        
+        # 建立 Excel 表格內容
+        editor_df = display_df[['item_id', 'name', 'wd_avg']].copy()
+        editor_df['預估數量'] = 0
+        editor_df = editor_df.rename(columns={'item_id': '編號', 'name': '品名', 'wd_avg': '參考'})
+        
+        st.markdown(f"#### 📊 出餐計畫表 (共 {len(editor_df)} 項)")
         edited_df = st.data_editor(
             editor_df,
             hide_index=True,
@@ -59,16 +113,16 @@ def show():
             column_config={
                 "編號": st.column_config.TextColumn("編號", disabled=True),
                 "品名": st.column_config.TextColumn("品名", disabled=True),
-                "平日均銷(參考)": st.column_config.NumberColumn("參考", disabled=True),
+                "參考": st.column_config.NumberColumn("參考", disabled=True),
                 "預估數量": st.column_config.NumberColumn("預估數量 ✍️", min_value=0, step=1, format="%d")
             }
         )
         
-        # 4. 解決「表格上沒有的商品」：手動新增區塊
+        # 臨時新增品項區塊 (不影響常態菜單)
         if "sashimi_temp_items" not in st.session_state:
             st.session_state.sashimi_temp_items = []
 
-        with st.expander("➕ 表格上沒有？點此手動新增臨時品項"):
+        with st.expander("➕ 表格上沒有？點此手動新增【單次臨時品項】"):
             col1, col2, col3 = st.columns([2, 4, 2])
             with col1: temp_id = st.text_input("編號 (選填)", key="s_temp_id", placeholder="例如: 999")
             with col2: temp_name = st.text_input("品名 (必填)", key="s_temp_name", placeholder="例如: 鮭魚特製拼盤")
@@ -85,10 +139,9 @@ def show():
                     })
                     st.rerun()
 
-        # 顯示已加入的臨時品項
         if st.session_state.sashimi_temp_items:
             st.markdown("<div style='background-color: #332d22; padding: 10px; border-radius: 5px;'>", unsafe_allow_html=True)
-            st.markdown("##### 🛒 臨時新增清單")
+            st.markdown("##### 🛒 今日臨時新增清單")
             for idx, item in enumerate(st.session_state.sashimi_temp_items):
                 st.markdown(f"- {item['name']} ➜ **{item['qty']} 份**")
             if st.button("🗑️ 清除臨時清單", size="small"):
@@ -108,7 +161,6 @@ def show():
                 cart_dict = {}
                 current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 
-                # 寫入正規商品 (同時加入操作人與時間紀錄！)
                 for _, row in valid_items.iterrows():
                     cart_key = f"{row['編號']}_{row['品名']}"
                     cart_dict[cart_key] = {
@@ -116,11 +168,10 @@ def show():
                         'name': row['品名'],
                         'cat': '生魚片',
                         'qty': row['預估數量'],
-                        'operator': current_user,  # 追蹤是誰建檔的
-                        'update_time': current_time # 追蹤建檔時間
+                        'operator': current_user,  
+                        'update_time': current_time 
                     }
                 
-                # 寫入臨時商品
                 for temp_item in st.session_state.sashimi_temp_items:
                     cart_key = f"{temp_item['item_id']}_{temp_item['name']}"
                     cart_dict[cart_key] = {
@@ -134,7 +185,6 @@ def show():
                 
                 save_ordered_data(target_date_str, cart_dict)
                 
-                # 產生 LINE 訊息
                 msg = f"🐟 【阿布潘員工系統 - 生魚片部】 🐟\n🗓️ 出餐日期：{target_date_str}\n👨‍💻 填表人員：{current_user}\n──────────────────\n📋 【預估出餐明細】\n"
                 for _, data in cart_dict.items():
                     msg += f"🔸 {data['name']} ➜ {data['qty']} 份\n"
@@ -149,14 +199,13 @@ def show():
                 
                 if note: msg += f"\n──────────────────\n💡 【備註】：\n{note}\n"
                 
-                # 清除臨時清單並準備發送
                 st.session_state.sashimi_temp_items = []
                 line_url = f"https://line.me/R/msg/text/?{urllib.parse.quote(msg)}"
                 st.success(f"✅ {target_date_str} 的出餐計畫已存檔！(操作人：{current_user})")
                 st.link_button("🚀 點擊這裡打開 LINE 發送至群組", url=line_url, type="primary", use_container_width=True)
 
     # ==========================================
-    # 分頁 2：下午實際回報
+    # 分頁 2：下午實際回報 (維持原樣不動)
     # ==========================================
     with tab_report:
         report_date = st.date_input("📌 選擇回報日期", value=today)
@@ -199,5 +248,4 @@ def show():
                         actual_updates[row['cart_key']] = row['實際出餐']
                     
                     batch_update_record_qty(date_str, actual_updates)
-                    # 提示文字加上追蹤人，讓員工知道系統有在記錄
                     st.success(f"✅ 實際生產量已全數批次更新成功！(回報人：{current_user})")
