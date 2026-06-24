@@ -75,14 +75,14 @@ def show():
             selected_options = st.multiselect("選擇常態出餐商品：", options=all_item_options, default=current_default_options, label_visibility="collapsed")
             if st.button("💾 儲存並更新表格", use_container_width=True):
                 new_active_ids = [opt.split(" - ")[0] for opt in selected_options]
-                with st.spinner("正在寫入雲端..."):
+                with st.spinner("更新中..."):
                     success = save_menu_template(DEPT_NAME, new_active_ids)
                 if success:
-                    st.success("✅ 菜單已成功更新至雲端！")
+                    st.success("✅ 菜單已成功更新！")
                     st.rerun()
 
             st.divider()
-            st.markdown("#### 2️⃣ 新增「ERP 尚未建檔」的新產品")
+            st.markdown("#### 2️⃣ 新增「未建檔」的新產品")
             col_id, col_name, col_btn = st.columns([2, 4, 2])
             with col_id: new_c_id = st.text_input("自訂編號 (選填)", placeholder="例: N001")
             with col_name: new_c_name = st.text_input("新商品名稱 (必填)", placeholder="例: 炙燒特選黑鮪")
@@ -103,7 +103,7 @@ def show():
                             c_list.append({"item_id": final_id, "name": new_c_name})
                             
                             # 加上雲端寫入動畫與錯誤攔截
-                            with st.spinner(f"正在將 {new_c_name} 寫入 Google 試算表..."):
+                            with st.spinner(f"正在將 {new_c_name} 儲存..."):
                                 success1 = save_custom_items(DEPT_NAME, c_list)
                                 
                                 active_list = load_menu_template(DEPT_NAME) or []
@@ -114,7 +114,7 @@ def show():
                                     success2 = True
                                     
                             if success1 and success2:
-                                st.success(f"✅ {new_c_name} 已成功加入雲端！")
+                                st.success(f"✅ {new_c_name} 已成功！")
                                 st.rerun()
         
         display_df = sashimi_df[sashimi_df['item_id'].isin(active_item_ids)].copy()
@@ -194,7 +194,7 @@ def show():
                 with st.spinner("訂單存檔中..."):
                     save_ordered_data(target_date_str, cart_dict)
                 
-                msg = f"🐟 【阿布潘員工系統 - 生魚片部】 🐟\n🗓️ 出餐日期：{target_date_str}\n👨‍💻 填表人員：{current_user}\n──────────────────\n📋 【預估出餐明細】\n"
+                msg = f"🐟 【阿布潘水產 - 生魚片部】 🐟\n🗓️ 出餐日期：{target_date_str}\n👨‍💻 填表人員：{current_user}\n──────────────────\n📋 【預估出餐明細】\n"
                 for _, data in cart_dict.items():
                     msg += f"🔸 {data['name']} ➜ {data['qty']} 份\n"
                 
@@ -224,7 +224,7 @@ def show():
             st.info(f"該日生魚片部尚無任何出餐紀錄。")
         else:
             st.markdown(f"#### 📝 {date_str} 實際出餐回報表")
-            st.markdown("<p style='color: #FF6B6B; font-size: 14px;'>※ 請在下班前，將【實際出餐】欄位填妥並按下底部的儲存。</p>", unsafe_allow_html=True)
+            st.markdown("<p style='color: #FF6B6B; font-size: 14px;'>※ 請於今日，將【實際出餐】欄位填妥並按下底部的儲存。</p>", unsafe_allow_html=True)
             
             sashimi_records['item_id_clean'] = sashimi_records['item_id'].astype(str).apply(lambda x: x.split('_')[0])
             report_df = sashimi_records[['item_id_clean', 'name', 'ordered_qty', 'actual_qty', 'cart_key']].copy()
@@ -244,13 +244,13 @@ def show():
             )
             
             st.markdown("<br>", unsafe_allow_html=True)
-            if st.button("💾 批次儲存今日實際出餐", type="primary", use_container_width=True):
+            if st.button("💾 儲存今日實際出餐", type="primary", use_container_width=True):
                 actual_updates = {}
                 for _, row in edited_report_df.iterrows():
                     actual_updates[row['cart_key']] = row['實際出餐']
                 with st.spinner("儲存回報中..."):
                     batch_update_record_qty(date_str, actual_updates)
-                st.success(f"✅ 實際生產量已全數批次更新成功！(回報人：{current_user})")
+                st.success(f"✅ 實際生產量已更新成功！(回報人：{current_user})")
 
         st.divider()
         with st.expander("➕ 補登未在預估單上的出餐品項 (下午臨時加出)"):
