@@ -65,18 +65,16 @@ def show():
         st.divider()
         
         # ------------------------------------------
-        # 🌟 新功能：常態菜單過濾器 (新增/移除邏輯)
+        # 🌟 常態菜單過濾器 (新增/移除邏輯)
         # ------------------------------------------
-        # 準備選單用的所有選項 (格式: "80001 - 特選鮭魚")
         all_item_options = (sashimi_df['item_id'] + " - " + sashimi_df['name']).tolist()
         
-        # 讀取先前的設定，如果沒有，預設顯示全部商品
         active_item_ids = load_menu_template()
         if active_item_ids is None:
             active_item_ids = sashimi_df['item_id'].tolist()
             
-        # 找出目前要打勾的選項
-        current_default_options = sashimi_df[sashimi_df['item_id'].isin(active_ids)]['item_id'] + " - " + sashimi_df[sashimi_df['item_id'].isin(active_ids)]['name']
+        # 👉 剛剛的 Bug 就在這裡：已經修正為 active_item_ids
+        current_default_options = sashimi_df[sashimi_df['item_id'].isin(active_item_ids)]['item_id'] + " - " + sashimi_df[sashimi_df['item_id'].isin(active_item_ids)]['name']
         current_default_options = current_default_options.tolist()
         
         with st.expander("⚙️ 自訂常態出餐菜單 (點此新增/移除表格品項)"):
@@ -89,18 +87,14 @@ def show():
             )
             
             if st.button("💾 更新表格畫面", use_container_width=True):
-                # 把 "80001 - 特選鮭魚" 轉回 "80001"
                 new_active_ids = [opt.split(" - ")[0] for opt in selected_options]
                 save_menu_template(new_active_ids)
                 st.success("✅ 菜單已更新！正在重新載入表格...")
                 st.rerun()
 
-        # 過濾出要顯示在表格裡的資料
         display_df = sashimi_df[sashimi_df['item_id'].isin(active_item_ids)].copy()
-        
         # ------------------------------------------
         
-        # 建立 Excel 表格內容
         editor_df = display_df[['item_id', 'name', 'wd_avg']].copy()
         editor_df['預估數量'] = 0
         editor_df = editor_df.rename(columns={'item_id': '編號', 'name': '品名', 'wd_avg': '參考'})
@@ -118,7 +112,6 @@ def show():
             }
         )
         
-        # 臨時新增品項區塊 (不影響常態菜單)
         if "sashimi_temp_items" not in st.session_state:
             st.session_state.sashimi_temp_items = []
 
@@ -205,7 +198,7 @@ def show():
                 st.link_button("🚀 點擊這裡打開 LINE 發送至群組", url=line_url, type="primary", use_container_width=True)
 
     # ==========================================
-    # 分頁 2：下午實際回報 (維持原樣不動)
+    # 分頁 2：下午實際回報
     # ==========================================
     with tab_report:
         report_date = st.date_input("📌 選擇回報日期", value=today)
