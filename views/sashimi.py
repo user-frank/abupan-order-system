@@ -8,36 +8,63 @@ from data_engine import load_sales_data
 from record_engine import save_ordered_data, load_daily_record, batch_update_record_qty
 from bom_engine import calculate_bom
 
-# 建立一個存放該部門菜單偏好設定的檔案路徑
-TEMPLATE_FILE = "sashimi_menu_template.json"
+# --- 存放系統設定的檔案路徑 ---
+TEMPLATE_FILE = "sashimi_menu_template.json" # 記住打勾了哪些商品
+CUSTOM_ITEMS_FILE = "sashimi_custom_items.json" # 記住手動新增了哪些「新商品」
 
+# ==========================================
+# 輔助函數：讀取與儲存設定
+# ==========================================
 def load_menu_template():
-    """讀取儲存的菜單偏好，如果沒有則回傳 None"""
     if os.path.exists(TEMPLATE_FILE):
         try:
             with open(TEMPLATE_FILE, "r", encoding="utf-8") as f:
                 return json.load(f)
-        except:
-            return None
+        except: return None
     return None
 
 def save_menu_template(item_ids):
-    """儲存使用者的菜單偏好"""
     with open(TEMPLATE_FILE, "w", encoding="utf-8") as f:
         json.dump(item_ids, f, ensure_ascii=False)
 
+def load_custom_items():
+    if os.path.exists(CUSTOM_ITEMS_FILE):
+        try:
+            with open(CUSTOM_ITEMS_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except: return []
+    return []
+
+def save_custom_items(items):
+    with open(CUSTOM_ITEMS_FILE, "w", encoding="utf-8") as f:
+        json.dump(items, f, ensure_ascii=False)
+
+# ==========================================
+# 主畫面邏輯
+# ==========================================
 def show():
     current_user = st.session_state.get("user_name", "未知操作員")
     
     st.markdown("### 🔪 生魚片部 - 專屬工作區")
     st.markdown("<p style='color: #888; margin-top: -10px; font-size: 14px;'>請直接在表格的【預估數量】或【實際出餐】欄位中輸入數字。</p>", unsafe_allow_html=True)
     
+    # 1. 讀取 ERP 正規資料
     df, _ = load_sales_data()
     if df.empty:
-        st.warning("⚠️ 無法讀取商品資料，請確認 ERP 同步狀態。")
+        st.warning("⚠️ 無法讀取 ERP 商品資料。")
         return
         
     sashimi_df = df[df['cat'] == '生魚片'].copy()
+
+    # 2. 讀取「手動新增」的新產品，並無縫合併到清單中
+    custom_items = load_custom_items()
+    if custom_items:
+        custom_df = pd.DataFrame(custom_items)
+        custom_df['cat'] = '生魚片'
+        custom_df['wd_avg'] = 0.0 # 新產品預設歷史均銷為 0
+        # 將自訂商品與 ERP 商品合併
+        sashimi_df = pd.concat([sashimi_df, custom_df], ignore_index=True)
+
     sashimi_df = sashimi_df.sort_values(by='item_id') 
 
     tab_plan, tab_report = st.tabs(["📝 1. 早班預估出餐", "✅ 2. 下午實際回報"])
@@ -65,7 +92,7 @@ def show():
         st.divider()
         
         # ------------------------------------------
-        # 🌟 常態菜單過濾器 (新增/移除邏輯)
+        # 🌟 系統設定中心 (白名單過濾 + 新增永久商品)
         # ------------------------------------------
         all_item_options = (sashimi_df['item_id'] + " - " + sashimi_df['name']).tolist()
         
@@ -73,27 +100,57 @@ def show():
         if active_item_ids is None:
             active_item_ids = sashimi_df['item_id'].tolist()
             
-        # 👉 剛剛的 Bug 就在這裡：已經修正為 active_item_ids
         current_default_options = sashimi_df[sashimi_df['item_id'].isin(active_item_ids)]['item_id'] + " - " + sashimi_df[sashimi_df['item_id'].isin(active_item_ids)]['name']
         current_default_options = current_default_options.tolist()
         
-        with st.expander("⚙️ 自訂常態出餐菜單 (點此新增/移除表格品項)"):
-            st.markdown("💡 **提示：** 在這裡移除的品項不會刪除 ERP 資料，只是在下方的表格中「隱藏」起來，讓點單畫面更乾淨。")
-            
+        with st.expander("⚙️ 系統設定：自訂常態菜單 & 新增未建檔商品"):
+            st.markdown("#### 1️⃣ 隱藏 / 顯示現有商品")
+            st.markdown("<span style='font-size:12px;color:#888;'>在此移除的品項只會從下方表格隱藏，讓畫面更乾淨。</span>", unsafe_allow_html=True)
             selected_options = st.multiselect(
                 "選擇這個月常態出餐的商品：",
                 options=all_item_options,
-                default=current_default_options
+                default=current_default_options,
+                label_visibility="collapsed"
             )
-            
-            if st.button("💾 更新表格畫面", use_container_width=True):
+            if st.button("💾 更新顯示表格", use_container_width=True):
                 new_active_ids = [opt.split(" - ")[0] for opt in selected_options]
                 save_menu_template(new_active_ids)
-                st.success("✅ 菜單已更新！正在重新載入表格...")
+                st.success("✅ 菜單已更新！")
                 st.rerun()
 
-        display_df = sashimi_df[sashimi_df['item_id'].isin(active_item_ids)].copy()
+            st.divider()
+            
+            # --- 核心新功能：永久加入新商品 ---
+            st.markdown("#### 2️⃣ 新增「ERP 尚未建檔」的新產品")
+            st.markdown("<span style='font-size:12px;color:#888;'>在此新增的商品會**永久**加入系統中，並出現在上方的選單裡。</span>", unsafe_allow_html=True)
+            col_id, col_name, col_btn = st.columns([2, 4, 2])
+            with col_id: new_c_id = st.text_input("自訂編號 (選填)", placeholder="例: N001")
+            with col_name: new_c_name = st.text_input("新商品名稱 (必填)", placeholder="例: 炙燒特選黑鮪")
+            with col_btn:
+                st.markdown("<div style='margin-top:28px;'></div>", unsafe_allow_html=True)
+                if st.button("➕ 永久加入系統", type="primary", use_container_width=True):
+                    if not new_c_name.strip():
+                        st.error("商品名稱不能為空！")
+                    else:
+                        # 產生專屬 ID，避免跟 ERP 撞名
+                        final_id = new_c_id.strip() if new_c_id.strip() else f"NEW_{int(datetime.datetime.now().timestamp())}"
+                        
+                        # 1. 存入新產品資料庫
+                        c_list = load_custom_items()
+                        c_list.append({"item_id": final_id, "name": new_c_name})
+                        save_custom_items(c_list)
+                        
+                        # 2. 自動把它加入「目前顯示的白名單」中
+                        active_list = load_menu_template() or []
+                        if final_id not in active_list:
+                            active_list.append(final_id)
+                            save_menu_template(active_list)
+                            
+                        st.success(f"✅ {new_c_name} 已成功永久加入系統！")
+                        st.rerun()
         # ------------------------------------------
+        
+        display_df = sashimi_df[sashimi_df['item_id'].isin(active_item_ids)].copy()
         
         editor_df = display_df[['item_id', 'name', 'wd_avg']].copy()
         editor_df['預估數量'] = 0
@@ -112,32 +169,34 @@ def show():
             }
         )
         
+        # 臨時單次特製商品 (保留給客製化需求，如"鮭魚不要蔥")
         if "sashimi_temp_items" not in st.session_state:
             st.session_state.sashimi_temp_items = []
 
-        with st.expander("➕ 表格上沒有？點此手動新增【單次臨時品項】"):
+        with st.expander("📝 遇到單次客製化需求？點此手動輸入【臨時品項】"):
+            st.markdown("<span style='font-size:12px;color:#888;'>此處輸入的商品「只會出現在本次點單」，不會被永久記錄到系統菜單中。</span>", unsafe_allow_html=True)
             col1, col2, col3 = st.columns([2, 4, 2])
             with col1: temp_id = st.text_input("編號 (選填)", key="s_temp_id", placeholder="例如: 999")
-            with col2: temp_name = st.text_input("品名 (必填)", key="s_temp_name", placeholder="例如: 鮭魚特製拼盤")
+            with col2: temp_name = st.text_input("品名 (必填)", key="s_temp_name", placeholder="例如: 鮭魚去鱗特製版")
             with col3: temp_qty = st.number_input("數量", min_value=1, step=1, key="s_temp_qty")
             
-            if st.button("➕ 加入臨時清單", use_container_width=True):
+            if st.button("➕ 加入本次訂單", use_container_width=True):
                 if temp_name.strip() == "":
                     st.error("品名不能為空！")
                 else:
                     st.session_state.sashimi_temp_items.append({
                         "item_id": temp_id if temp_id else f"臨時_{len(st.session_state.sashimi_temp_items)+1}",
-                        "name": f"【臨時】{temp_name}",
+                        "name": f"【客製】{temp_name}",
                         "qty": temp_qty
                     })
                     st.rerun()
 
         if st.session_state.sashimi_temp_items:
             st.markdown("<div style='background-color: #332d22; padding: 10px; border-radius: 5px;'>", unsafe_allow_html=True)
-            st.markdown("##### 🛒 今日臨時新增清單")
+            st.markdown("##### 🛒 本次額外客製化清單")
             for idx, item in enumerate(st.session_state.sashimi_temp_items):
                 st.markdown(f"- {item['name']} ➜ **{item['qty']} 份**")
-            if st.button("🗑️ 清除臨時清單", size="small"):
+            if st.button("🗑️ 清除客製化清單", size="small"):
                 st.session_state.sashimi_temp_items = []
                 st.rerun()
             st.markdown("</div><br>", unsafe_allow_html=True)
@@ -149,7 +208,7 @@ def show():
             valid_items = edited_df[edited_df['預估數量'] > 0]
             
             if valid_items.empty and not st.session_state.sashimi_temp_items:
-                st.warning("請至少輸入一項商品的預估數量，或是新增臨時商品！")
+                st.warning("請至少輸入一項商品的預估數量，或是新增客製化商品！")
             else:
                 cart_dict = {}
                 current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
