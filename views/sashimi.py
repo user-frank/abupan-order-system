@@ -288,19 +288,24 @@ def show():
                 # 🌟 【終極排版升級】：兩行跳格法 + 紅綠燈 + @老闆
                 msg = f"🐟 【阿布潘員工系統 - 生魚片部】 🐟\n🗓️ 出餐日期：{date_str}\n👨‍💻 回報人員：{current_user}\n──────────────────\n📋 【本日實際出餐數量】\n"
                 
+                # 準備兩個清單來做分類
+                green_list = []
+                red_list = []
+                
                 for key, data in report_qty_dict.items():
                     o_qty = data['ordered']
                     a_qty = data['actual']
                     
-                    # 判斷紅綠燈
                     if str(o_qty) == str(a_qty):
-                        icon = "🟢"
+                        green_list.append(f"🟢 {data['name']}\n　 預估出餐 {o_qty} 份 / 實際 {a_qty} 份\n")
                     else:
-                        icon = "🔴"
-                        
-                    # 兩行跳格排版 (使用全形空白確保對齊)
-                    msg += f"{icon} {data['name']}\n"
-                    msg += f"　 預估出餐 {o_qty} 份 / 實際 {a_qty} 份\n"
+                        red_list.append(f"🔴 {data['name']}\n　 預估出餐 {o_qty} 份 / 實際 {a_qty} 份\n")
+                
+                # 先把綠燈的印出來，再把紅燈的接在最底下
+                for green_msg in green_list:
+                    msg += green_msg
+                for red_msg in red_list:
+                    msg += red_msg
                     
                 msg += f"\n──────────────────\n📦 【今日加減量狀態】\n👉 {status_option}\n"
                 
