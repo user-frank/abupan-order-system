@@ -79,11 +79,11 @@ def show():
                 with st.spinner("正在寫入雲端..."):
                     success = save_menu_template(DEPT_NAME, new_active_ids)
                 if success:
-                    st.success("✅ 菜單已成功更新至雲端！")
+                    st.success("✅ 菜單已成功更新！")
                     st.rerun()
 
             st.divider()
-            st.markdown("#### 2️⃣ 新增「ERP 尚未建檔」的新產品")
+            st.markdown("#### 2️⃣ 新增新產品")
             col_id, col_name, col_btn = st.columns([2, 4, 2])
             with col_id: new_c_id = st.text_input("自訂編號 (選填)", placeholder="例: N001")
             with col_name: new_c_name = st.text_input("新商品名稱 (必填)", placeholder="例: 炙燒特選黑鮪")
@@ -102,7 +102,7 @@ def show():
                             c_list = load_custom_items(DEPT_NAME)
                             c_list.append({"item_id": final_id, "name": new_c_name})
                             
-                            with st.spinner(f"正在將 {new_c_name} 寫入 Google 試算表..."):
+                            with st.spinner(f"正在將 {new_c_name} 寫入 ..."):
                                 success1 = save_custom_items(DEPT_NAME, c_list)
                                 
                                 active_list = load_menu_template(DEPT_NAME) or []
@@ -113,7 +113,7 @@ def show():
                                     success2 = True
                                     
                             if success1 and success2:
-                                st.success(f"✅ {new_c_name} 已成功加入雲端！")
+                                st.success(f"✅ {new_c_name} 已成功加入！")
                                 st.rerun()
         
         display_df = sashimi_df[sashimi_df['item_id'].isin(active_item_ids)].copy()
@@ -193,7 +193,7 @@ def show():
                 with st.spinner("訂單存檔中..."):
                     save_ordered_data(target_date_str, cart_dict)
                 
-                msg = f"🐟 【阿布潘員工系統 - 生魚片部】 🐟\n🗓️ 出餐日期：{target_date_str}\n👨‍💻 填表人員：{current_user}\n──────────────────\n📋 【預估出餐明細】\n"
+                msg = f"🐟 【阿布潘 - 生魚片部】 🐟\n🗓️ 出餐日期：{target_date_str}\n👨‍💻 填表人員：{current_user}\n──────────────────\n📋 【預估出餐明細】\n"
                 for _, data in cart_dict.items():
                     msg += f"🔸 {data['name']} ➜ {data['qty']} 份\n"
                 
