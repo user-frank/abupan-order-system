@@ -252,9 +252,12 @@ def show():
             st.markdown("<br>", unsafe_allow_html=True)
             if st.button("💾 批次儲存今日實際出餐", type="primary", use_container_width=True, key="btn_save_report"):
                 actual_updates = {}
+                # 🌟 【智慧追蹤】：只抓取「被這個人修改過」的數字
                 for idx, row in edited_report_df.iterrows():
-                    original_qty = report_df.iloc[idx]['實際出餐']
+                    # 【修復 Bug】改用 .loc 透過真實索引精準定位，避免 out-of-bounds
+                    original_qty = report_df.loc[idx, '實際出餐']
                     new_qty = row['實際出餐']
+                    
                     if str(original_qty) != str(new_qty):
                         actual_updates[row['cart_key']] = new_qty
                         
