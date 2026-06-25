@@ -22,10 +22,9 @@ def show():
         st.warning("⚠️ 無法讀取 ERP 商品資料。")
         return
         
-    # 抓取 ERP 中壽司部的資料 (如果你的 ERP 分類叫別的，請在這裡修改)
+    # 抓取 ERP 中壽司部的資料 
     sushi_df = df[df['cat'] == '壽司'].copy()
     
-    # 萬一測試時 ERP 沒有壽司資料，給個防呆提示
     if sushi_df.empty:
         st.info("💡 系統提示：目前 ERP 裡沒有標示為『壽司』的商品，你可以點擊下方『系統設定』手動新增。")
         
@@ -133,14 +132,13 @@ def show():
         st.markdown(f"#### 📊 出餐計畫表 (共 {len(display_df)} 項)")
         
         plan_qty_dict = {} 
-        cols = st.columns(2) # 宣告兩個大欄位
+        cols = st.columns(2) 
         
         for idx, (_, row) in enumerate(display_df.iterrows()):
-            # 利用取餘數 (% 2) 的技巧，把商品交替塞入左邊和右邊的欄位
             with cols[idx % 2]:
                 with st.container(border=True):
-                    # 【極致省空間設計】：品名加上 white-space:nowrap 確保不斷行，並隱藏均銷文字
-                    st.markdown(f"<div style='font-size:15px; font-weight:bold; color:white; margin-bottom:5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;' title='{row['name']}'>{row['name']}</div>", unsafe_allow_html=True)
+                    # 💡 把「編號」加回來了！用括號跟灰色字體呈現
+                    st.markdown(f"<div style='font-size:15px; font-weight:bold; color:white; margin-bottom:5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;' title='{row['name']}'>{row['name']} <span style='font-size:12px; color:#888; font-weight:normal;'>({row['item_id']})</span></div>", unsafe_allow_html=True)
                     
                     plan_qty_dict[row['item_id']] = st.number_input(
                         "數量", min_value=0, step=1, value=0, 
@@ -209,7 +207,6 @@ def show():
                 with st.spinner("訂單存檔中..."):
                     save_ordered_data(target_date_str, cart_dict)
                 
-                # 🍣 壽司專屬的 Emoji 與標題
                 msg = f"🍣 【阿布潘員工系統 - 壽司部】 🍣\n🗓️ 出餐日期：{target_date_str}\n👨‍💻 填表人員：{current_user}\n──────────────────\n📋 【預估出餐明細】\n"
                 for _, data in cart_dict.items():
                     msg += f"🔸 {data['name']} ➜ {data['qty']} 份\n"
@@ -243,9 +240,6 @@ def show():
         else:
             st.markdown(f"#### 📝 {date_str} 實際出餐回報表")
             
-            # ==========================================
-            # 🌟 雙欄位緊湊輸入模式 (實際回報)
-            # ==========================================
             actual_updates = {} 
             report_qty_dict = {} 
             
@@ -257,8 +251,9 @@ def show():
                 
                 with cols[idx % 2]:
                     with st.container(border=True):
-                        # 品名 + 黃色預估數字
-                        st.markdown(f"<div style='font-size:15px; font-weight:bold; color:white; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;'>{row['name']}</div><div style='color:#FFD93D; font-size:13px; margin-bottom:3px;'>預估: <b>{ordered_qty}</b> 份</div>", unsafe_allow_html=True)
+                        # 💡 把「編號」加回來了！用括號跟灰色字體呈現
+                        clean_id = str(row['item_id']).split('_')[0]
+                        st.markdown(f"<div style='font-size:15px; font-weight:bold; color:white; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;'>{row['name']} <span style='font-size:12px; color:#888; font-weight:normal;'>({clean_id})</span></div><div style='color:#FFD93D; font-size:13px; margin-bottom:3px;'>預估: <b>{ordered_qty}</b> 份</div>", unsafe_allow_html=True)
                         
                         new_qty = st.number_input(
                             "實際出餐", min_value=0, step=1, value=original_qty, 
@@ -288,7 +283,6 @@ def show():
                     with st.spinner("儲存回報中..."):
                         batch_update_record_qty(date_str, actual_updates, current_user, current_time)
                 
-                # 🍣 壽司部的紅綠燈推播
                 msg = f"🍣 【阿布潘員工系統 - 壽司部】 🍣\n🗓️ 出餐日期：{date_str}\n👨‍💻 回報人員：{current_user}\n──────────────────\n📋 【本日實際出餐數量】\n"
                 
                 green_list = []
@@ -314,7 +308,8 @@ def show():
 
         st.divider()
         with st.expander("➕ 補登未在預估單上的出餐品項 (下午臨時加出)"):
-            all_sushi_options = (sashimi_df['item_id'] + " - " + sashimi_df['name']).tolist()
+            # 🐞 【修復】：將原本錯誤的 sashimi_df 改正為 sushi_df
+            all_sushi_options = (sushi_df['item_id'] + " - " + sushi_df['name']).tolist()
             ad_hoc_opt = st.selectbox("選擇臨時加出的品項", all_sushi_options, key="sushi_adhoc_sel")
             ad_hoc_qty = st.number_input("實際出餐數量", min_value=1, step=1, key="sushi_adhoc_qty")
             
