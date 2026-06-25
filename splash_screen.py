@@ -1,129 +1,100 @@
-# -*- coding: utf-8 -*-
 import streamlit as st
 import time
 
 def show_splash_screen():
-    """
-    渲染皇家黑金高貴風格的開場動畫（防彈安全版）。
-    已加入強制 UTF-8 宣告與安全外部資源，確保絕不當機。
-    """
-    
+    # 🌟 使用純 CSS 打造現代化、平滑的開場動畫
     splash_html = """
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@700&display=swap');
-
-    header {visibility: hidden;}
+    /* 引入 Google 現代黑體字型 */
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@500;700&display=swap');
     
-    .splash-container {
+    /* 滿版黑色遮罩背景 */
+    #splash-screen {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background-color: #0E1117; /* 搭配 Streamlit 的深色背景 */
         display: flex;
         flex-direction: column;
         justify-content: center;
         align-items: center;
-        height: 100vh;
-        background-color: #000000;
-        background-image: radial-gradient(circle at center, #1a1a1a 0%, #000000 70%);
-        font-family: 'Noto Serif TC', serif;
-        overflow: hidden;
-        position: relative;
-    }
-    
-    .bg-lobster-faint {
-        position: absolute;
-        width: 100%;
-        height: 100%;
-        background-image: url('https://images.unsplash.com/photo-1553659971-f01207815844?q=80&w=1000'); 
-        background-size: cover;
-        background-position: center;
-        opacity: 0; 
-        z-index: 1;
-        filter: grayscale(100%) sepia(100%) hue-rotate(20deg) brightness(0.2) contrast(1.2);
-        animation: bgFadeIn 4s ease-out 0.5s forwards;
+        z-index: 999999; /* 確保它疊在最上層 */
+        animation: fadeOut 0.6s ease-in-out 1.5s forwards; /* 停留 1.8 秒後平滑淡出 */
     }
 
-    .logo-container {
-        position: relative;
-        width: 150px;
-        height: 150px;
-        margin-bottom: 30px;
-        z-index: 2;
-        animation: popInAndGlow 1.5s ease-out forwards;
-    }
-
-    .logo-container img {
-        width: 100%;
-        height: 100%;
-        object-fit: contain;
-        filter: invert(70%) sepia(80%) saturate(400%) hue-rotate(5deg) brightness(1.2) drop-shadow(0 0 15px rgba(212, 175, 55, 0.8));
-        animation: lobsterBreathing 3s ease-in-out infinite 1.5s;
-    }
-    
-    .gold-text {
-        background: linear-gradient(to right, #BF953F 0%, #FCF6BA 25%, #B38728 50%, #FBF5B7 75%, #BF953F 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-size: 200% auto;
-        animation: shine 3s linear infinite;
-        opacity: 0;
-    }
-
-    .title {
-        font-size: 48px;
+    /* 主標題樣式 (阿布潘員工系統) */
+    .splash-title {
+        color: #ffffff;
+        font-family: 'Noto Sans TC', sans-serif;
+        font-size: 2.5rem;
         font-weight: 700;
-        margin-top: 10px;
-        letter-spacing: 8px;
-        z-index: 2;
-        animation: shine 3s linear infinite, slideUp 1s ease-out 0.8s forwards;
+        letter-spacing: 2px;
+        margin-bottom: 10px;
+        animation: slideUp 0.8s ease-out forwards;
+    }
+
+    /* 副標題樣式 (INTELLIGENT SYSTEM) */
+    .splash-subtitle {
+        color: #f37021; /* 阿布潘專屬橘色 */
+        font-family: 'Arial', sans-serif;
+        font-size: 1.1rem;
+        font-weight: bold;
+        letter-spacing: 6px;
+        animation: slideUp 0.8s ease-out 0.2s forwards;
+        opacity: 0; /* 一開始先隱藏，製造層次感 */
     }
     
-    .subtitle {
-        font-size: 20px;
-        margin-top: 20px;
-        letter-spacing: 4px;
-        color: #C5A059;
+    /* 載入轉圈圈動畫 */
+    .spinner {
+        margin-top: 35px;
+        width: 40px;
+        height: 40px;
+        border: 4px solid rgba(255, 255, 255, 0.1);
+        border-top: 4px solid #f37021;
+        border-radius: 50%;
         opacity: 0;
-        z-index: 2;
-        animation: slideUp 1s ease-out 1.2s forwards;
+        /* 結合浮現與無限旋轉 */
+        animation: fadeIn 0.5s ease-out 0.5s forwards, spin 1s linear infinite;
     }
 
-    @keyframes bgFadeIn {
-        0% { opacity: 0; transform: scale(1.1); }
-        100% { opacity: 0.15; transform: scale(1); }
-    }
-
-    @keyframes popInAndGlow {
-        0% { transform: scale(0) rotate(-10deg); opacity: 0; filter: blur(10px); }
-        100% { transform: scale(1) rotate(0deg); opacity: 1; filter: blur(0px); }
+    /* 定義各種動畫軌跡 */
+    @keyframes slideUp {
+        0% { transform: translateY(20px); opacity: 0; }
+        100% { transform: translateY(0); opacity: 1; }
     }
     
-    @keyframes lobsterBreathing {
-        0%, 100% { transform: scale(1); filter: invert(70%) sepia(80%) saturate(400%) hue-rotate(5deg) brightness(1.2) drop-shadow(0 0 15px rgba(212, 175, 55, 0.8)); }
-        50% { transform: scale(1.05); filter: invert(70%) sepia(80%) saturate(500%) hue-rotate(5deg) brightness(1.4) drop-shadow(0 0 25px rgba(212, 175, 55, 1)); }
+    @keyframes fadeIn {
+        0% { opacity: 0; }
+        100% { opacity: 1; }
     }
 
-    @keyframes shine { to { background-position: 200% center; } }
-    @keyframes slideUp { 0% { transform: translateY(30px); opacity: 0; } 100% { transform: translateY(0); opacity: 1; } }
-
-    @media (max-width: 768px) {
-        .logo-container { width: 110px; height: 110px; margin-bottom: 20px; }
-        .title { font-size: 32px; letter-spacing: 4px; }
-        .subtitle { font-size: 16px; letter-spacing: 2px; }
-        .splash-container { height: 90vh; }
+    @keyframes fadeOut {
+        0% { opacity: 1; visibility: visible; }
+        100% { opacity: 0; visibility: hidden; display: none; }
+    }
+    
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
     }
     </style>
-    
-    <div class="splash-container">
-        <div class="bg-lobster-faint"></div>
-        <div class="logo-container">
-            <img src="https://cdn-icons-png.flaticon.com/512/1996/1996068.png" alt="Lobster">
-        </div>
-        <div class="title gold-text">阿布潘水產</div>
-        <div class="subtitle">智能出餐決策系統</div>
+
+    <!-- 這是畫面上實際顯示的內容區塊 -->
+    <div id="splash-screen">
+        <div class="splash-title">🐟 阿布潘員工系統</div>
+        <div class="splash-subtitle">INTELLIGENT SYSTEM</div>
+        <div class="spinner"></div>
     </div>
     """
     
-    placeholder = st.empty()
-    with placeholder.container():
-        st.markdown(splash_html, unsafe_allow_html=True)
+    # 1. 建立一個佔位符，並將 HTML 畫面注入
+    splash_placeholder = st.empty()
+    splash_placeholder.markdown(splash_html, unsafe_allow_html=True)
     
-    time.sleep(3.5)
-    placeholder.empty()
+    # 2. 讓 Python 後台暫停 2.5 秒，確保前端的 CSS 動畫有足夠時間播完並淡出
+    time.sleep(2.5)
+    
+    # 3. 徹底清除佔位符，露出底下的總機登入大廳
+    splash_placeholder.empty()
