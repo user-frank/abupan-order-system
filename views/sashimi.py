@@ -33,7 +33,6 @@ def show():
         custom_df['item_id'] = custom_df['item_id'].astype(str) 
         sashimi_df = pd.concat([sashimi_df, custom_df], ignore_index=True)
 
-    # 🛡️ 防呆機制：強制刪除重複編號，避免勾選清單當機
     sashimi_df = sashimi_df.drop_duplicates(subset=['item_id'], keep='last')
     sashimi_df = sashimi_df.sort_values(by='item_id') 
 
@@ -125,9 +124,6 @@ def show():
         
         display_df = sashimi_df[sashimi_df['item_id'].isin(active_item_ids)].copy()
         
-        # ==========================================
-        # 手機專屬大卡片輸入模式 (預估出餐)
-        # ==========================================
         st.markdown(f"#### 📊 出餐計畫表 (共 {len(display_df)} 項)")
         st.markdown("<p style='color: #888; font-size: 13px;'>請透過右側 ➕➖ 按鈕或直接點擊數字輸入。</p>", unsafe_allow_html=True)
         
@@ -176,7 +172,6 @@ def show():
 
         note = st.text_input("📝 備註事項 (人員排班或特殊交代)", placeholder="例如：切魚-阿君、開魚-阿君...", key="plan_note")
         
-        # 🌟 【新增】：持久化的 LINE 成功訊息區塊 (預估出餐)
         if st.session_state.get('sashimi_plan_msg'):
             st.success(f"✅ {target_date_str} 的出餐計畫已成功存檔！")
             st.link_button("🚀 打開 LINE APP 發送 (手機專用)", url=st.session_state['sashimi_plan_url'], type="primary", use_container_width=True)
@@ -220,8 +215,15 @@ def show():
                     save_ordered_data(target_date_str, cart_dict)
                 
                 msg = f"🐟 【阿布潘-生魚片部】 🐟\n🗓️ 出餐日期：{target_date_str}\n👨‍💻 填表人員：{current_user}\n──────────────────\n📋 【預估出餐明細】\n"
+                
+                # 🌟 加入總份數計數器 (預估出餐)
+                total_plan_qty = 0
                 for _, data in cart_dict.items():
                     msg += f"🔸 {data['name']} ➜ {data['qty']} 份\n"
+                    total_plan_qty += data['qty']
+                
+                # 在明細下方印出總份數
+                msg += f"(今日預估總份數 = {total_plan_qty} 份)\n"
                 
                 msg += "\n──────────────────\n📦 【預估備料需求】\n"
                 bom_df = calculate_bom(cart_dict)
@@ -230,7 +232,6 @@ def show():
                 else: msg += "尚無對應原料設定。\n"
                 if note: msg += f"\n──────────────────\n💡 【備註】：\n{note}\n"
                 
-                # 🌟 將訊息存入記憶體並重整
                 st.session_state.sashimi_temp_items = []
                 st.session_state['sashimi_plan_msg'] = msg
                 st.session_state['sashimi_plan_url'] = f"https://line.me/R/msg/text/?{urllib.parse.quote(msg)}"
@@ -293,7 +294,6 @@ def show():
             )
             report_note = st.text_input("📝 實際回報備註 (特殊狀況說明)", placeholder="例如：今天下雨客人少，所以小甜蝦少做...", key="report_note_input")
             
-            # 🌟 【新增】：持久化的 LINE 成功訊息區塊 (實際回報)
             if st.session_state.get('sashimi_report_msg'):
                 st.success(f"✅ 實際生產量已更新！(回報人：{current_user})")
                 st.link_button("🚀 打開 LINE APP 發送 (手機專用)", url=st.session_state['sashimi_report_url'], type="primary", use_container_width=True)
@@ -317,9 +317,16 @@ def show():
                 green_list = []
                 red_list = []
                 
+                # 🌟 加入總份數計數器 (實際回報：同時計算預估與實際)
+                total_o_qty = 0
+                total_a_qty = 0
+                
                 for key, data in report_qty_dict.items():
                     o_qty = data['ordered']
                     a_qty = data['actual']
+                    
+                    total_o_qty += o_qty
+                    total_a_qty += a_qty
                     
                     if str(o_qty) == str(a_qty):
                         green_list.append(f"🟢 {data['name']}\n　 預估出餐 {o_qty} 份 / 實際 {a_qty} 份\n")
@@ -330,13 +337,15 @@ def show():
                     msg += green_msg
                 for red_msg in red_list:
                     msg += red_msg
+                
+                # 在明細下方印出總計比對
+                msg += f"(今日總預估 = {total_o_qty} 份 / 總實際 = {total_a_qty} 份)\n"
                     
                 msg += f"\n──────────────────\n📦 【今日加減量狀態】\n👉 {status_option}\n"
                 
                 if report_note:
                     msg += f"💡 【備註說明】：\n{report_note}\n"
                     
-                # 🌟 將訊息存入記憶體並重整
                 st.session_state['sashimi_report_msg'] = msg
                 st.session_state['sashimi_report_url'] = f"https://line.me/R/msg/text/?{urllib.parse.quote(msg)}"
                 st.rerun()
