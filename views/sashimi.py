@@ -33,6 +33,8 @@ def show():
         custom_df['item_id'] = custom_df['item_id'].astype(str) 
         sashimi_df = pd.concat([sashimi_df, custom_df], ignore_index=True)
 
+    # 🛡️ 防呆機制：強制刪除重複編號，避免勾選清單當機
+    sashimi_df = sashimi_df.drop_duplicates(subset=['item_id'], keep='last')
     sashimi_df = sashimi_df.sort_values(by='item_id') 
 
     tab_plan, tab_report = st.tabs(["📝 1. 預估出餐", "✅ 2. 實際回報"])
@@ -174,6 +176,18 @@ def show():
 
         note = st.text_input("📝 備註事項 (人員排班或特殊交代)", placeholder="例如：切魚-阿君、開魚-阿君...", key="plan_note")
         
+        # 🌟 【新增】：持久化的 LINE 成功訊息區塊 (預估出餐)
+        if st.session_state.get('sashimi_plan_msg'):
+            st.success(f"✅ {target_date_str} 的出餐計畫已成功存檔！")
+            st.link_button("🚀 打開 LINE APP 發送 (手機專用)", url=st.session_state['sashimi_plan_url'], type="primary", use_container_width=True)
+            st.info("💻 **電腦版操作：請點擊下方框框右上角的「複製圖示」，並貼到 LINE 群組。**")
+            st.code(st.session_state['sashimi_plan_msg'], language="text")
+            if st.button("關閉提示訊息", use_container_width=True, key="close_plan_msg"):
+                del st.session_state['sashimi_plan_msg']
+                del st.session_state['sashimi_plan_url']
+                st.rerun()
+            st.divider()
+
         if st.button("💾 確認存檔並產生 LINE 指令", type="primary", use_container_width=True, key="btn_save_plan"):
             
             valid_items = []
@@ -216,10 +230,11 @@ def show():
                 else: msg += "尚無對應原料設定。\n"
                 if note: msg += f"\n──────────────────\n💡 【備註】：\n{note}\n"
                 
+                # 🌟 將訊息存入記憶體並重整
                 st.session_state.sashimi_temp_items = []
-                line_url = f"https://line.me/R/msg/text/?{urllib.parse.quote(msg)}"
-                st.success(f"✅ {target_date_str} 的出餐計畫已存檔！(操作人：{current_user})")
-                st.link_button("🚀 點擊這裡打開 LINE 發送至群組", url=line_url, type="primary", use_container_width=True)
+                st.session_state['sashimi_plan_msg'] = msg
+                st.session_state['sashimi_plan_url'] = f"https://line.me/R/msg/text/?{urllib.parse.quote(msg)}"
+                st.rerun()
 
     # ==========================================
     # 分頁 2：實際回報
@@ -278,6 +293,18 @@ def show():
             )
             report_note = st.text_input("📝 實際回報備註 (特殊狀況說明)", placeholder="例如：今天下雨客人少，所以小甜蝦少做...", key="report_note_input")
             
+            # 🌟 【新增】：持久化的 LINE 成功訊息區塊 (實際回報)
+            if st.session_state.get('sashimi_report_msg'):
+                st.success(f"✅ 實際生產量已更新！(回報人：{current_user})")
+                st.link_button("🚀 打開 LINE APP 發送 (手機專用)", url=st.session_state['sashimi_report_url'], type="primary", use_container_width=True)
+                st.info("💻 **電腦版操作：請點擊下方框框右上角的「複製圖示」，並貼到 LINE 群組。**")
+                st.code(st.session_state['sashimi_report_msg'], language="text")
+                if st.button("關閉提示訊息", key="close_report_msg", use_container_width=True):
+                    del st.session_state['sashimi_report_msg']
+                    del st.session_state['sashimi_report_url']
+                    st.rerun()
+                st.divider()
+
             if st.button("💾 儲存回報並產生 LINE 指令", type="primary", use_container_width=True, key="btn_save_report"):
                 current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 
@@ -285,10 +312,8 @@ def show():
                     with st.spinner("儲存回報中..."):
                         batch_update_record_qty(date_str, actual_updates, current_user, current_time)
                 
-                # 🌟 【終極排版升級】：兩行跳格法 + 紅綠燈 + @老闆
                 msg = f"🐟 【阿布潘-生魚片部】 🐟\n🗓️ 出餐日期：{date_str}\n👨‍💻 回報人員：{current_user}\n──────────────────\n📋 【本日實際出餐數量】\n"
                 
-                # 準備兩個清單來做分類
                 green_list = []
                 red_list = []
                 
@@ -301,7 +326,6 @@ def show():
                     else:
                         red_list.append(f"🔴 {data['name']}\n　 預估出餐 {o_qty} 份 / 實際 {a_qty} 份\n")
                 
-                # 先把綠燈的印出來，再把紅燈的接在最底下
                 for green_msg in green_list:
                     msg += green_msg
                 for red_msg in red_list:
@@ -312,9 +336,10 @@ def show():
                 if report_note:
                     msg += f"💡 【備註說明】：\n{report_note}\n"
                     
-                line_url = f"https://line.me/R/msg/text/?{urllib.parse.quote(msg)}"
-                st.success(f"✅ 實際生產量已更新！(回報人：{current_user})")
-                st.link_button("🚀 點擊這裡打開 LINE 發送至群組", url=line_url, type="primary", use_container_width=True)
+                # 🌟 將訊息存入記憶體並重整
+                st.session_state['sashimi_report_msg'] = msg
+                st.session_state['sashimi_report_url'] = f"https://line.me/R/msg/text/?{urllib.parse.quote(msg)}"
+                st.rerun()
 
         st.divider()
         with st.expander("➕ 補登未在預估單上的出餐品項 (下午臨時加出)"):
