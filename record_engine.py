@@ -4,9 +4,6 @@ import gspread
 from google.oauth2.service_account import Credentials
 import os
 
-# ==========================================
-# ☁️ 雲端資料庫設定
-# ==========================================
 SHEET_NAME = "阿布潘出餐系統_雲端資料庫"
 WORKSHEET_NAME = "daily_records"
 
@@ -48,8 +45,8 @@ def _get_cloud_dataframe(sheet):
         data = sheet.get_all_records()
         df = pd.DataFrame(data)
         
-        # 🌟 定義完整的 12 個欄位 (加入追蹤)
-        expected_cols = ['date', 'cart_key', 'item_id', 'name', 'cat', 'ordered_qty', 'actual_qty', 'pos_qty', 'plan_operator', 'plan_time', 'report_operator', 'report_time']
+        # 🌟 擴充欄位：加入了 price(單價) 與 pos_revenue(POS實際營收)
+        expected_cols = ['date', 'cart_key', 'item_id', 'name', 'cat', 'ordered_qty', 'actual_qty', 'pos_qty', 'pos_revenue', 'price', 'plan_operator', 'plan_time', 'report_operator', 'report_time']
         
         if df.empty:
             headers = sheet.row_values(1)
@@ -58,15 +55,14 @@ def _get_cloud_dataframe(sheet):
                 sheet.append_row(headers)
             df = pd.DataFrame(columns=headers)
             
-        # 🛡️ 【向後相容防護】：如果讀下來的表單缺少追蹤欄位，自動補齊
+        # 🛡️ 向後相容防護：舊資料自動補齊新欄位
         for col in ['plan_operator', 'plan_time', 'report_operator', 'report_time']:
-            if col not in df.columns:
-                df[col] = "未記錄"
+            if col not in df.columns: df[col] = "未記錄"
+        for col in ['pos_revenue', 'price']:
+            if col not in df.columns: df[col] = 0
                 
-        if 'cart_key' in df.columns:
-            df['cart_key'] = df['cart_key'].astype(str)
-        if 'date' in df.columns:
-            df['date'] = df['date'].astype(str)
+        if 'cart_key' in df.columns: df['cart_key'] = df['cart_key'].astype(str)
+        if 'date' in df.columns: df['date'] = df['date'].astype(str)
             
         return df
     except Exception as e:
@@ -117,7 +113,6 @@ def save_ordered_data(date_str, cart_items):
         if mask.any():
             idx = df[mask].index[0]
             df.at[idx, 'ordered_qty'] = int(item['qty'])
-            # 🌟 覆寫建檔人資訊
             df.at[idx, 'plan_operator'] = str(item.get('operator', '未記錄'))
             df.at[idx, 'plan_time'] = str(item.get('update_time', '未記錄'))
         else:
@@ -130,6 +125,8 @@ def save_ordered_data(date_str, cart_items):
                 'ordered_qty': int(item['qty']),
                 'actual_qty': 0,
                 'pos_qty': 0,
+                'pos_revenue': 0, # 預設營收 0
+                'price': 0,       # 預設單價 0，未來由 ERP 寫入
                 'plan_operator': str(item.get('operator', '未記錄')),
                 'plan_time': str(item.get('update_time', '未記錄')),
                 'report_operator': "未記錄",
@@ -145,7 +142,6 @@ def save_ordered_data(date_str, cart_items):
 def update_record_qty(date_str, cart_key, field, new_qty):
     sheet = get_worksheet()
     if not sheet: return
-    
     df = _get_cloud_dataframe(sheet)
     mask = (df['date'] == str(date_str)) & (df['cart_key'] == str(cart_key))
     if mask.any():
@@ -156,7 +152,6 @@ def update_record_qty(date_str, cart_key, field, new_qty):
 def delete_order_item(date_str, cart_key):
     sheet = get_worksheet()
     if not sheet: return
-    
     df = _get_cloud_dataframe(sheet)
     mask = (df['date'] == str(date_str)) & (df['cart_key'] == str(cart_key))
     if mask.any():
@@ -166,7 +161,6 @@ def delete_order_item(date_str, cart_key):
 def batch_update_record_qty(date_str, updates_dict, current_user="", current_time=""):
     sheet = get_worksheet()
     if not sheet: return
-    
     df = _get_cloud_dataframe(sheet)
     updated = False
     
@@ -175,7 +169,6 @@ def batch_update_record_qty(date_str, updates_dict, current_user="", current_tim
         if mask.any():
             idx = df[mask].index[0]
             df.at[idx, 'actual_qty'] = int(new_qty)
-            # 🌟 寫入回報人資訊
             if current_user: df.at[idx, 'report_operator'] = str(current_user)
             if current_time: df.at[idx, 'report_time'] = str(current_time)
             updated = True
