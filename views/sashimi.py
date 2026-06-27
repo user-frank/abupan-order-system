@@ -15,6 +15,23 @@ def show():
     
     today = datetime.date.today() 
     
+    # 🌟 CSS 黑魔法：強制手機版維持「雙排顯示」
+    st.markdown("""
+    <style>
+    @media (max-width: 640px) {
+        [data-testid="stHorizontalBlock"] {
+            flex-direction: row !important;
+            flex-wrap: wrap !important;
+        }
+        [data-testid="stHorizontalBlock"] > [data-testid="column"] {
+            width: calc(50% - 0.5rem) !important;
+            flex: 1 1 calc(50% - 0.5rem) !important;
+            min-width: calc(50% - 0.5rem) !important;
+        }
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
     st.markdown("### 🔪 生魚片部 - 專屬工作區")
     
     df, _ = load_sales_data()
@@ -23,6 +40,9 @@ def show():
         return
         
     sashimi_df = df[df['cat'] == '生魚片'].copy()
+    if sashimi_df.empty:
+        st.info("💡 系統提示：目前 ERP 裡沒有標示為『生魚片』的商品，你可以點擊下方『系統設定』手動新增。")
+        
     sashimi_df['item_id'] = sashimi_df['item_id'].astype(str)
 
     custom_items = load_custom_items(DEPT_NAME)
@@ -30,6 +50,7 @@ def show():
         custom_df = pd.DataFrame(custom_items)
         custom_df['cat'] = '生魚片'
         custom_df['wd_avg'] = 0.0 
+        custom_df['price'] = 0  # 確保自訂商品有預設單價
         custom_df['item_id'] = custom_df['item_id'].astype(str) 
         sashimi_df = pd.concat([sashimi_df, custom_df], ignore_index=True)
 
@@ -54,7 +75,7 @@ def show():
             date_options.append(label)
             date_mapping[label] = d.strftime("%Y-%m-%d")
 
-        selected_date_label = st.selectbox("📌 選擇出餐日期", date_options, key="plan_date")
+        selected_date_label = st.selectbox("📌 選擇出餐日期", date_options, key="sashimi_plan_date")
         target_date_str = date_mapping[selected_date_label]
         
         st.divider()
@@ -69,33 +90,31 @@ def show():
         
         with st.expander("⚙️ 系統設定：自訂常態菜單 & 新增未建檔商品"):
             st.markdown("#### 1️⃣ 隱藏 / 顯示現有商品")
-            st.markdown("<p style='font-size:12px;color:#888;'>打勾代表顯示，取消打勾則從下方隱藏。</p>", unsafe_allow_html=True)
-            
-            with st.form("menu_filter_form", border=False):
+            with st.form("sashimi_menu_filter_form", border=False):
                 with st.container(height=250):
                     new_selected_ids = []
                     for idx, opt in enumerate(all_item_options):
                         opt_id = opt.split(" - ")[0]
                         is_checked = str(opt_id) in active_item_ids
                         
-                        if st.checkbox(opt, value=is_checked, key=f"chk_menu_{opt_id}_{idx}"):
+                        if st.checkbox(opt, value=is_checked, key=f"chk_sashimi_menu_{opt_id}_{idx}"):
                             new_selected_ids.append(opt_id)
                             
                 if st.form_submit_button("💾 儲存並更新畫面", use_container_width=True):
-                    with st.spinner("正在寫入..."):
+                    with st.spinner("正在寫入雲端..."):
                         success = save_menu_template(DEPT_NAME, new_selected_ids)
                     if success:
-                        st.success("✅ 菜單已成功更新！")
+                        st.success("✅ 菜單已成功更新至雲端！")
                         st.rerun()
 
             st.divider()
             st.markdown("#### 2️⃣ 新增新產品")
             col_id, col_name, col_btn = st.columns([2, 4, 2])
-            with col_id: new_c_id = st.text_input("自訂編號 (選填)", placeholder="例: N001", key="new_c_id")
-            with col_name: new_c_name = st.text_input("新商品名稱 (必填)", placeholder="例: 炙燒特選黑鮪", key="new_c_name")
+            with col_id: new_c_id = st.text_input("自訂編號 (選填)", placeholder="例: N001", key="sashimi_new_c_id")
+            with col_name: new_c_name = st.text_input("新商品名稱 (必填)", placeholder="例: 鮭魚特製拼盤", key="sashimi_new_c_name")
             with col_btn:
                 st.markdown("<div style='margin-top:28px;'></div>", unsafe_allow_html=True)
-                if st.button("➕ 永久加入系統", type="primary", use_container_width=True, key="btn_add_custom"):
+                if st.button("➕ 永久加入系統", type="primary", use_container_width=True, key="btn_sashimi_add_custom"):
                     if not new_c_name.strip():
                         st.error("商品名稱不能為空！")
                     else:
@@ -119,37 +138,40 @@ def show():
                                     success2 = True
                                     
                             if success1 and success2:
-                                st.success(f"✅ {new_c_name} 已成功加入！")
+                                st.success(f"✅ {new_c_name} 已成功！")
                                 st.rerun()
         
         display_df = sashimi_df[sashimi_df['item_id'].isin(active_item_ids)].copy()
         
         st.markdown(f"#### 📊 出餐計畫表 (共 {len(display_df)} 項)")
-        st.markdown("<p style='color: #888; font-size: 13px;'>請透過右側 ➕➖ 按鈕或直接點擊數字輸入。</p>", unsafe_allow_html=True)
         
         plan_qty_dict = {} 
+        cols = st.columns(2) 
         
-        for _, row in display_df.iterrows():
-            with st.container(border=True):
-                col_info, col_input = st.columns([6, 4], vertical_alignment="center")
-                with col_info:
-                    st.markdown(f"<span style='font-size:16px; font-weight:bold; color:white;'>{row['name']}</span><br><span style='color:#888; font-size:12px;'>編號: {row['item_id']} | 💰單價: ${int(row['price'])}</span>", unsafe_allow_html=True)
-                with col_input:
+        for idx, (_, row) in enumerate(display_df.iterrows()):
+            with cols[idx % 2]:
+                with st.container(border=True):
+                    clean_id = str(row['item_id']).split('_')[0]
+                    # 🌟 加上 .get('price', 0) 完美防當機！
+                    item_price = int(row.get('price', 0)) 
+                    
+                    st.markdown(f"<div style='font-size:14px; font-weight:bold; color:white; margin-bottom:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;' title='{row['name']}'>{row['name']} <span style='font-size:11px; color:#888; font-weight:normal;'>({clean_id})</span></div><div style='font-size:12px; color:#FFD93D; margin-bottom:5px;'>💰單價: ${item_price}</div>", unsafe_allow_html=True)
+                    
                     plan_qty_dict[row['item_id']] = st.number_input(
                         "數量", min_value=0, step=1, value=0, 
-                        key=f"plan_{row['item_id']}", label_visibility="collapsed"
+                        key=f"sashimi_plan_{row['item_id']}", label_visibility="collapsed"
                     )
 
         if "sashimi_temp_items" not in st.session_state:
             st.session_state.sashimi_temp_items = []
 
-        with st.expander("📝 遇到單次客製化需求？點此手動輸入【臨時品項】"):
+        with st.expander("📝 客製化需求？手動輸入【單次臨時品項】"):
             col1, col2, col3 = st.columns([2, 4, 2])
-            with col1: temp_id = st.text_input("編號 (選填)", key="s_temp_id", placeholder="例如: 999")
-            with col2: temp_name = st.text_input("品名 (必填)", key="s_temp_name", placeholder="例如: 鮭魚去鱗特製版")
-            with col3: temp_qty = st.number_input("數量", min_value=1, step=1, key="s_temp_qty")
+            with col1: temp_id = st.text_input("編號 (選填)", key="sashimi_temp_id", placeholder="例如: 999")
+            with col2: temp_name = st.text_input("品名 (必填)", key="sashimi_temp_name", placeholder="例如: 鮭魚去鱗特製版")
+            with col3: temp_qty = st.number_input("數量", min_value=1, step=1, key="sashimi_temp_qty")
             
-            if st.button("➕ 加入本次訂單", use_container_width=True, key="btn_add_temp"):
+            if st.button("➕ 加入本次訂單", use_container_width=True, key="sashimi_btn_add_temp"):
                 if temp_name.strip() == "":
                     st.error("品名不能為空！")
                 else:
@@ -162,34 +184,39 @@ def show():
 
         if st.session_state.sashimi_temp_items:
             st.markdown("<div style='background-color: #332d22; padding: 10px; border-radius: 5px;'>", unsafe_allow_html=True)
-            st.markdown("##### 🛒 本次額外客製化清單")
+            st.markdown("##### 🛒 本次臨時客製清單")
             for idx, item in enumerate(st.session_state.sashimi_temp_items):
                 st.markdown(f"- {item['name']} ➜ **{item['qty']} 份**")
-            if st.button("🗑️ 清除客製化清單", size="small", key="btn_clear_temp"):
+            if st.button("🗑️ 清除臨時清單", size="small", key="sashimi_btn_clear_temp"):
                 st.session_state.sashimi_temp_items = []
                 st.rerun()
             st.markdown("</div><br>", unsafe_allow_html=True)
 
-        note = st.text_input("📝 備註事項 (人員排班或特殊交代)", placeholder="例如：切魚-阿君、開魚-阿君...", key="plan_note")
+        note = st.text_input("📝 備註事項 (人員排班或特殊交代)", placeholder="例如：切魚-阿君...", key="sashimi_plan_note")
         
+        # ==========================================
+        # 持久化的 LINE 成功訊息區塊
+        # ==========================================
         if st.session_state.get('sashimi_plan_msg'):
             st.success(f"✅ {target_date_str} 的出餐計畫已成功存檔！")
+            
             st.link_button("🚀 打開 LINE APP 發送 (手機專用)", url=st.session_state['sashimi_plan_url'], type="primary", use_container_width=True)
             st.info("💻 **電腦版操作：請點擊下方框框右上角的「複製圖示」，並貼到 LINE 群組。**")
             st.code(st.session_state['sashimi_plan_msg'], language="text")
-            if st.button("關閉提示訊息", use_container_width=True, key="close_plan_msg"):
+            
+            if st.button("關閉提示訊息", use_container_width=True, key="sashimi_close_plan_msg"):
                 del st.session_state['sashimi_plan_msg']
                 del st.session_state['sashimi_plan_url']
                 st.rerun()
             st.divider()
 
-        if st.button("💾 確認存檔並產生 LINE 指令", type="primary", use_container_width=True, key="btn_save_plan"):
-            
+        if st.button("💾 確認存檔並產生 LINE 指令", type="primary", use_container_width=True, key="sashimi_btn_save_plan"):
             valid_items = []
             for _, row in display_df.iterrows():
                 qty = plan_qty_dict.get(row['item_id'], 0)
                 if qty > 0:
-                    valid_items.append({'item_id': str(row['item_id']), 'name': row['name'], 'qty': qty})
+                    item_price = int(row.get('price', 0))
+                    valid_items.append({'item_id': str(row['item_id']), 'name': row['name'], 'qty': qty, 'price': item_price})
             
             if not valid_items and not st.session_state.sashimi_temp_items:
                 st.warning("請至少輸入一項商品的預估數量，或是新增客製化商品！")
@@ -201,28 +228,28 @@ def show():
                     cart_key = f"{item['item_id']}_{item['name']}"
                     cart_dict[cart_key] = {
                         'item_id': item['item_id'], 'name': item['name'], 'cat': '生魚片',
-                        'qty': item['qty'], 'operator': current_user, 'update_time': current_time 
+                        'qty': item['qty'], 'price': item['price'],
+                        'operator': current_user, 'update_time': current_time 
                     }
                 
                 for temp_item in st.session_state.sashimi_temp_items:
                     cart_key = f"{temp_item['item_id']}_{temp_item['name']}"
                     cart_dict[cart_key] = {
                         'item_id': str(temp_item['item_id']), 'name': temp_item['name'], 'cat': '生魚片',
-                        'qty': temp_item['qty'], 'operator': current_user, 'update_time': current_time
+                        'qty': temp_item['qty'], 'price': 0, 
+                        'operator': current_user, 'update_time': current_time
                     }
                 
                 with st.spinner("訂單存檔中..."):
                     save_ordered_data(target_date_str, cart_dict)
                 
-                msg = f"🐟 【阿布潘-生魚片部】 🐟\n🗓️ 出餐日期：{target_date_str}\n👨‍💻 填表人員：{current_user}\n──────────────────\n📋 【預估出餐明細】\n"
+                msg = f"🔪 【阿布潘-生魚片部】 🐟\n🗓️ 出餐日期：{target_date_str}\n👨‍💻 填表人員：{current_user}\n──────────────────\n📋 【預估出餐明細】\n"
                 
-                # 🌟 加入總份數計數器 (預估出餐)
                 total_plan_qty = 0
                 for _, data in cart_dict.items():
                     msg += f"🔸 {data['name']} ➜ {data['qty']} 份\n"
                     total_plan_qty += data['qty']
                 
-                # 在明細下方印出總份數
                 msg += f"(今日預估總份數 = {total_plan_qty} 份)\n"
                 
                 msg += "\n──────────────────\n📦 【預估備料需求】\n"
@@ -241,7 +268,7 @@ def show():
     # 分頁 2：實際回報
     # ==========================================
     with tab_report:
-        report_date = st.date_input("📌 選擇回報日期", value=today, key="report_date")
+        report_date = st.date_input("📌 選擇回報日期", value=today, key="sashimi_report_date")
         date_str = report_date.strftime("%Y-%m-%d")
         
         with st.spinner("讀取回報紀錄中..."):
@@ -253,25 +280,25 @@ def show():
             st.info(f"該日生魚片部尚無任何出餐紀錄。")
         else:
             st.markdown(f"#### 📝 {date_str} 實際出餐回報表")
-            st.markdown("<p style='color: #FF6B6B; font-size: 14px;'>※ 請在今日，確認【實際出餐】數量後產生 LINE 回報。</p>", unsafe_allow_html=True)
             
             actual_updates = {} 
             report_qty_dict = {} 
             
-            for _, row in sashimi_records.iterrows():
+            cols = st.columns(2)
+            for idx, (_, row) in enumerate(sashimi_records.iterrows()):
                 cart_key = row['cart_key']
                 ordered_qty = int(row['ordered_qty'])
                 original_qty = int(row['actual_qty'])
+                item_price = int(row.get('price', 0)) # 🌟 安全抓取單價
                 
-                with st.container(border=True):
-                    col_info, col_input = st.columns([6, 4], vertical_alignment="center")
-                    with col_info:
+                with cols[idx % 2]:
+                    with st.container(border=True):
                         clean_id = str(row['item_id']).split('_')[0]
-                        st.markdown(f"<span style='font-size:16px; font-weight:bold; color:white;'>{row['name']}</span><br><span style='color:#888; font-size:13px;'>編號: {clean_id} | 預估: <span style='color:#FFD93D; font-weight:bold;'>{ordered_qty} 份</span></span>", unsafe_allow_html=True)
-                    with col_input:
+                        st.markdown(f"<div style='font-size:14px; font-weight:bold; color:white; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;'>{row['name']} <span style='font-size:11px; color:#888; font-weight:normal;'>({clean_id})</span></div><div style='color:#FFD93D; font-size:12px; margin-bottom:3px;'>💰單價: ${item_price} | 預估: <b>{ordered_qty}</b> 份</div>", unsafe_allow_html=True)
+                        
                         new_qty = st.number_input(
                             "實際出餐", min_value=0, step=1, value=original_qty, 
-                            key=f"report_{cart_key}", label_visibility="collapsed"
+                            key=f"sashimi_report_{cart_key}", label_visibility="collapsed"
                         )
                         
                         report_qty_dict[cart_key] = {
@@ -290,34 +317,32 @@ def show():
                 "請選擇今日出餐總結狀態：", 
                 ["無增減 (如預估)", "今日有加量", "今日有減量", "皆有 (部分加/部分減)"], 
                 horizontal=True,
-                key="report_status"
+                key="sashimi_report_status"
             )
-            report_note = st.text_input("📝 實際回報備註 (特殊狀況說明)", placeholder="例如：今天下雨客人少，所以小甜蝦少做...", key="report_note_input")
+            report_note = st.text_input("📝 實際回報備註 (特殊狀況說明)", placeholder="例如：提早賣完...", key="sashimi_report_note_input")
             
             if st.session_state.get('sashimi_report_msg'):
                 st.success(f"✅ 實際生產量已更新！(回報人：{current_user})")
                 st.link_button("🚀 打開 LINE APP 發送 (手機專用)", url=st.session_state['sashimi_report_url'], type="primary", use_container_width=True)
                 st.info("💻 **電腦版操作：請點擊下方框框右上角的「複製圖示」，並貼到 LINE 群組。**")
                 st.code(st.session_state['sashimi_report_msg'], language="text")
-                if st.button("關閉提示訊息", key="close_report_msg", use_container_width=True):
+                if st.button("關閉提示訊息", key="sashimi_close_report_msg", use_container_width=True):
                     del st.session_state['sashimi_report_msg']
                     del st.session_state['sashimi_report_url']
                     st.rerun()
                 st.divider()
 
-            if st.button("💾 儲存回報並產生 LINE 指令", type="primary", use_container_width=True, key="btn_save_report"):
+            if st.button("💾 儲存回報並產生 LINE 指令", type="primary", use_container_width=True, key="sashimi_btn_save_report"):
                 current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 
                 if actual_updates:
                     with st.spinner("儲存回報中..."):
                         batch_update_record_qty(date_str, actual_updates, current_user, current_time)
                 
-                msg = f"🐟 【阿布潘-生魚片部】 🐟\n🗓️ 出餐日期：{date_str}\n👨‍💻 回報人員：{current_user}\n──────────────────\n📋 【本日實際出餐數量】\n"
+                msg = f"🔪 【阿布潘-生魚片部】 🐟\n🗓️ 出餐日期：{date_str}\n👨‍💻 回報人員：{current_user}\n──────────────────\n📋 【本日實際出餐數量】\n"
                 
                 green_list = []
                 red_list = []
-                
-                # 🌟 加入總份數計數器 (實際回報：同時計算預估與實際)
                 total_o_qty = 0
                 total_a_qty = 0
                 
@@ -329,17 +354,16 @@ def show():
                     total_a_qty += a_qty
                     
                     if str(o_qty) == str(a_qty):
-                        green_list.append(f"🟢 {data['name']}\n　 預估出餐 {o_qty} 份 / 實際 {a_qty} 份\n")
+                        green_list.append(f"🟢{data['name']}\n　 預估出餐 {o_qty} 份 / 實際 {a_qty} 份\n")
                     else:
-                        red_list.append(f"🔴 {data['name']}\n　 預估出餐 {o_qty} 份 / 實際 {a_qty} 份\n")
+                        red_list.append(f"🔴{data['name']}\n　 預估出餐 {o_qty} 份 / 實際 {a_qty} 份\n")
                 
                 for green_msg in green_list:
                     msg += green_msg
                 for red_msg in red_list:
                     msg += red_msg
-                
-                # 在明細下方印出總計比對
-                msg += f"(今日總預估 = {total_o_qty} 份 / 總實際 = {total_a_qty} 份)\n"
+                    
+                msg += f"\n(今日總預估 = {total_o_qty} 份 / 總實際 = {total_a_qty} 份)\n"
                     
                 msg += f"\n──────────────────\n📦 【今日加減量狀態】\n👉 {status_option}\n"
                 
@@ -352,13 +376,11 @@ def show():
 
         st.divider()
         with st.expander("➕ 補登未在預估單上的出餐品項 (下午臨時加出)"):
-            st.markdown("<span style='font-size:12px;color:#888;'>如果下午有出餐，但早上的預估單裡面沒有這個品項，請在這裡補登。</span>", unsafe_allow_html=True)
-            
             all_sashimi_options = (sashimi_df['item_id'] + " - " + sashimi_df['name']).tolist()
-            ad_hoc_opt = st.selectbox("選擇臨時加出的品項", all_sashimi_options, key="adhoc_sel")
-            ad_hoc_qty = st.number_input("實際出餐數量", min_value=1, step=1, key="adhoc_qty")
+            ad_hoc_opt = st.selectbox("選擇臨時加出的品項", all_sashimi_options, key="sashimi_adhoc_sel")
+            ad_hoc_qty = st.number_input("實際出餐數量", min_value=1, step=1, key="sashimi_adhoc_qty")
             
-            if st.button("➕ 立即補登至今日回報單", use_container_width=True, key="btn_add_adhoc"):
+            if st.button("➕ 立即補登至今日回報單", use_container_width=True, key="sashimi_btn_add_adhoc"):
                 ad_id = ad_hoc_opt.split(" - ")[0]
                 ad_name = ad_hoc_opt.split(" - ")[1]
                 ad_cart_key = f"{ad_id}_{ad_name}"
