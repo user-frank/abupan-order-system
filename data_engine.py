@@ -47,7 +47,8 @@ def extract_basic_data(df_blind):
         cols = df.columns
         id_col = next((c for c in cols if '編號' in c or '品號' in c), None)
         n_col = next((c for c in cols if '品名' in c or '商品名稱' in c), None)
-        # 自動識別單價欄位
+        
+        # 🌟 自動識別單價欄位
         p_col = next((c for c in cols if '單價' in c or '價格' in c or 'price' in c), None)
         
         if not (id_col and n_col): return None
@@ -64,6 +65,7 @@ def extract_basic_data(df_blind):
         df = df[(df['name'] != '') & (df['name'] != 'nan') & (df['name'] != 'None')]
         df['item_id'] = df['item_id'].astype(str).str.upper().str.strip().str.replace(r'\.0$', '', regex=True)
         
+        # 🌟 安全氣囊：如果有單價欄位就轉成數字，如果沒有就預設為 0
         if 'price' in df.columns:
             df['price'] = pd.to_numeric(df['price'].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
         else:
@@ -147,5 +149,6 @@ def load_sales_data():
     final_df['img'] = final_df['item_id'].apply(lambda x: image_lookup.get(str(x), DEFAULT_IMAGE))
     # 維持向下相容，避免舊程式報錯
     final_df['wd_avg'] = 0 
+    final_df['we_avg'] = 0 
     
     return final_df, []
