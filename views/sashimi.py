@@ -133,7 +133,7 @@ def show():
             with st.container(border=True):
                 col_info, col_input = st.columns([6, 4], vertical_alignment="center")
                 with col_info:
-                    st.markdown(f"<span style='font-size:16px; font-weight:bold; color:white;'>{row['name']}</span><br><span style='color:#888; font-size:12px;'>編號: {row['item_id']} | 參考均銷: {row['wd_avg']}</span>", unsafe_allow_html=True)
+                    st.markdown(f"<span style='font-size:16px; font-weight:bold; color:white;'>{row['name']}</span><br><span style='color:#888; font-size:12px;'>編號: {row['item_id']} | 💰單價: ${int(row['price'])}</span>", unsafe_allow_html=True)
                 with col_input:
                     plan_qty_dict[row['item_id']] = st.number_input(
                         "數量", min_value=0, step=1, value=0, 
