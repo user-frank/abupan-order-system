@@ -271,7 +271,7 @@ def show():
                     save_ordered_data(target_date_str, cart_dict)
                 
                 # 🌟 LINE 訊息加入包含星期幾的日期
-                msg = f"🔪 【阿布潘-生魚片部】 🐟\n🗓️ 出餐日：{target_date_display}\n👨‍💻 填表人：{current_user}\n──────────────────\n📋 【預估出餐明細】\n"
+                msg = f"🔪 【阿布潘-生魚片部】 🐟\n🗓️ 日期：{target_date_display}\n👨‍💻 填表人：{current_user}\n──────────────────\n📋 【預估出餐明細】\n"
                 total_plan_qty = 0
                 
                 for g_name in ["生魚片區", "小品區", "臨時客製區"]:
@@ -379,7 +379,7 @@ def show():
                         batch_update_record_qty(date_str, actual_updates, current_user, current_time)
                 
                 # 🌟 LINE 訊息加入包含星期幾的日期
-                msg = f"🔪 【阿布潘-生魚片部】 🐟\n🗓️ 出餐日：{report_date_display}\n👨‍💻 回報人：{current_user}\n──────────────────\n📋 【本日實際出餐數量】\n"
+                msg = f"🔪 【阿布潘-生魚片部】 🐟\n🗓️ 日期：{report_date_display}\n👨‍💻 回報人：{current_user}\n──────────────────\n📋 【本日實際出餐數量】\n"
                 
                 total_o_qty = 0
                 total_a_qty = 0
