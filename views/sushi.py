@@ -43,21 +43,20 @@ def show():
     
     st.markdown("### 🍣 壽司部 - 專屬工作區")
     
-    # ------------------------------------------
-    # 🛡️ 資料強效載入與合併區
-    # ------------------------------------------
     df, _ = load_sales_data()
     if df.empty:
-        st.warning("⚠️ 無法讀取 ERP 商品資料。")
+        st.warning("⚠️ 無法讀取商品資料。")
         return
         
-    # 🌟 核心修改：同時抓取「壽司」與「拉沙+熟食」的 Excel 資料！
     sushi_df = df[df['cat'].str.contains('壽司|熟食|拉沙|沙拉', na=False)].copy()
     
     if 'price' not in sushi_df.columns:
         sushi_df['price'] = 0
     sushi_df['price'] = pd.to_numeric(sushi_df['price'], errors='coerce').fillna(0).astype(int)
+    
+    # 🛡️【終極防護】：強制把編號與品名轉換為字串，徹底消滅 KeyError 與 AttributeError
     sushi_df['item_id'] = sushi_df['item_id'].astype(str)
+    sushi_df['name'] = sushi_df['name'].astype(str)
 
     custom_items = load_custom_items(DEPT_NAME)
     if custom_items:
@@ -66,12 +65,12 @@ def show():
         custom_df['wd_avg'] = 0.0 
         custom_df['price'] = 0  
         custom_df['item_id'] = custom_df['item_id'].astype(str) 
+        custom_df['name'] = custom_df['name'].astype(str) # 同樣防護自訂商品
         sushi_df = pd.concat([sushi_df, custom_df], ignore_index=True)
 
     sushi_df = sushi_df.drop_duplicates(subset=['item_id'], keep='last')
     sushi_df = sushi_df.sort_values(by='item_id') 
 
-    # 🌟 自動判斷預設分類：來自熟食Excel就歸類熟食區，其他歸類壽司區
     def get_default_subcat(cat_name):
         if "熟食" in str(cat_name) or "拉沙" in str(cat_name) or "沙拉" in str(cat_name):
             return "熟食區"
@@ -121,9 +120,10 @@ def show():
                 with st.container(height=200):
                     new_selected_ids = []
                     for idx, opt in enumerate(all_item_options):
-                        opt_id = opt.split(" - ")[0]
-                        is_checked = str(opt_id) in active_item_ids
-                        if st.checkbox(opt, value=is_checked, key=f"chk_sushi_menu_{opt_id}_{idx}"):
+                        # 🛡️ 雙重保險：強制轉字串再做 split，絕對不當機
+                        opt_id = str(opt).split(" - ")[0]
+                        is_checked = opt_id in active_item_ids
+                        if st.checkbox(str(opt), value=is_checked, key=f"chk_sushi_menu_{opt_id}_{idx}"):
                             new_selected_ids.append(opt_id)
                 if st.form_submit_button("💾 儲存顯示設定", use_container_width=True):
                     with st.spinner("寫入中..."):
@@ -176,7 +176,6 @@ def show():
         st.markdown(f"#### 📊 出餐計畫表 (共 {len(display_df)} 項)")
         plan_qty_dict = {} 
         
-        # 🌟 自動將畫面切成「壽司區」與「熟食區」兩大區塊！
         for group_name in ["壽司區", "熟食區"]:
             group_df = display_df[display_df['subcat'] == group_name]
             if not group_df.empty:
@@ -258,7 +257,7 @@ def show():
                 for item in valid_items:
                     cart_key = f"{item['item_id']}_{item['name']}"
                     cart_dict[cart_key] = {
-                        'item_id': item['item_id'], 'name': item['name'], 'cat': '壽司', # 🌟 統一看作壽司部業績
+                        'item_id': item['item_id'], 'name': item['name'], 'cat': '壽司',
                         'qty': item['qty'], 'price': item['price'], 'subcat': item['subcat'],
                         'operator': current_user, 'update_time': current_time 
                     }
@@ -274,7 +273,6 @@ def show():
                 with st.spinner("訂單存檔中..."):
                     save_ordered_data(target_date_str, cart_dict)
                 
-                # 🌟 LINE 訊息自動分區排版
                 msg = f"🍣 【阿布潘-壽司部】 🍣\n🗓️ 日期：{target_date_display}\n👨‍💻 填表人：{current_user}\n──────────────────\n📋 【預估出餐明細】\n"
                 total_plan_qty = 0
                 
@@ -313,13 +311,11 @@ def show():
         else:
             st.markdown(f"#### 📝 {report_date_display} 實際出餐回報表")
             
-            # 從雲端讀取出來的紀錄，透過 subcat_dict 還原它們的所屬區塊
             sushi_records['subcat'] = sushi_records['item_id'].astype(str).map(lambda x: subcat_dict.get(x.split('_')[0], "壽司區"))
             
             actual_updates = {} 
             report_qty_dict = {} 
             
-            # 🌟 回報畫面也自動分區顯示
             for group_name in ["壽司區", "熟食區", "臨時客製區"]:
                 group_records = sushi_records[sushi_records['subcat'] == group_name]
                 if not group_records.empty:
@@ -369,8 +365,8 @@ def show():
                 st.info("💻 **電腦版請點擊右上角複製貼到 LINE：**")
                 st.code(st.session_state['sushi_report_msg'], language="text")
                 if st.button("關閉提示", key="sushi_close_report_msg", use_container_width=True):
-                    del st.session_state['sashimi_report_msg']
-                    del st.session_state['sashimi_report_url']
+                    del st.session_state['sushi_report_msg']
+                    del st.session_state['sushi_report_url']
                     st.rerun()
                 st.divider()
 
@@ -386,7 +382,6 @@ def show():
                 total_o_qty = 0
                 total_a_qty = 0
                 
-                # 🌟 LINE 訊息分區顯示
                 for g_name in ["壽司區", "熟食區", "臨時客製區"]:
                     g_items = {k: d for k, d in report_qty_dict.items() if d['subcat'] == g_name}
                     if g_items:
