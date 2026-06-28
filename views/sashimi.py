@@ -6,7 +6,7 @@ from data_engine import load_sales_data
 from record_engine import save_ordered_data, load_daily_record, batch_update_record_qty
 from bom_engine import calculate_bom
 
-# 🌟 導入雲端設定引擎 (包含最新的分類功能)
+# 🌟 導入雲端設定引擎
 from config_engine import load_menu_template, save_menu_template, load_custom_items, save_custom_items, load_subcategories, save_subcategories
 
 def show():
@@ -53,7 +53,6 @@ def show():
         
     sashimi_df = df[df['cat'] == '生魚片'].copy()
     
-    # 【絕對防呆】：不管 Excel 有沒有 price，全部先確保欄位存在並補 0
     if 'price' not in sashimi_df.columns:
         sashimi_df['price'] = 0
     sashimi_df['price'] = pd.to_numeric(sashimi_df['price'], errors='coerce').fillna(0).astype(int)
@@ -71,7 +70,6 @@ def show():
     sashimi_df = sashimi_df.drop_duplicates(subset=['item_id'], keep='last')
     sashimi_df = sashimi_df.sort_values(by='item_id') 
 
-    # 🌟 讀取子分類字典，並自動貼上標籤 (沒設定過的預設為 '生魚片區')
     subcat_dict = load_subcategories(DEPT_NAME)
     sashimi_df['subcat'] = sashimi_df['item_id'].map(lambda x: subcat_dict.get(x, "生魚片區"))
 
@@ -83,6 +81,8 @@ def show():
     with tab_plan:
         date_options = []
         date_mapping = {} 
+        weekdays_tw = ["週一", "週二", "週三", "週四", "週五", "週六", "週日"] # 定義星期轉換
+        
         for i in range(0, 7):
             d = today + datetime.timedelta(days=i)
             wd = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"][d.weekday()]
@@ -94,7 +94,12 @@ def show():
             date_mapping[label] = d.strftime("%Y-%m-%d")
 
         selected_date_label = st.selectbox("📌 選擇出餐日期", date_options, key="sashimi_plan_date")
+        
+        # 資料庫存檔用的純日期字串 (ex: 2026-06-28)
         target_date_str = date_mapping[selected_date_label]
+        # 🌟 UI 與 LINE 顯示用的日期字串 (ex: 2026-06-28 (週日))
+        target_dt = datetime.datetime.strptime(target_date_str, "%Y-%m-%d")
+        target_date_display = f"{target_date_str} ({weekdays_tw[target_dt.weekday()]})"
         
         st.divider()
         
@@ -122,11 +127,9 @@ def show():
                     st.rerun()
 
             st.divider()
-            # 🌟 新功能：極速分類設定表
             st.markdown("#### 2️⃣ 商品分類設定 (生魚片 vs 小品)")
             st.markdown("<p style='font-size:12px;color:#888;'>在此調整商品所屬的分類區域，出餐表與 LINE 訊息將會自動切塊顯示。</p>", unsafe_allow_html=True)
             
-            # 只顯示目前有在菜單上的商品讓主管分類
             display_subcat_df = sashimi_df[sashimi_df['item_id'].isin(active_item_ids)][['item_id', 'name', 'subcat']].copy()
             
             edited_subcat = st.data_editor(
@@ -141,7 +144,6 @@ def show():
             )
             if st.button("💾 儲存分類標籤", use_container_width=True, key="btn_save_subcat"):
                 new_subcat_dict = dict(zip(edited_subcat['item_id'].astype(str), edited_subcat['subcat']))
-                # 融合原本設定，以免隱藏的商品設定不見
                 final_subcat_dict = {**subcat_dict, **new_subcat_dict}
                 with st.spinner("寫入中..."):
                     save_subcategories(DEPT_NAME, final_subcat_dict)
@@ -169,19 +171,16 @@ def show():
         st.markdown(f"#### 📊 出餐計畫表 (共 {len(display_df)} 項)")
         plan_qty_dict = {} 
         
-        # 🌟 自動將畫面切成「生魚片區」與「小品區」兩大區塊！
         for group_name in ["生魚片區", "小品區"]:
             group_df = display_df[display_df['subcat'] == group_name]
             if not group_df.empty:
-                # 顯示區塊大標題
                 icon = "🍣" if group_name == "生魚片區" else "🍤"
                 st.markdown(f"<h5 style='color:#FFD93D; margin-top:15px;'>{icon} 【{group_name}】</h5>", unsafe_allow_html=True)
                 
-                # 建立該區塊專屬的 Grid
                 st.markdown('<div class="grid-container">', unsafe_allow_html=True)
                 for _, row in group_df.iterrows():
                     clean_id = str(row['item_id']).split('_')[0]
-                    item_price = int(row['price']) # 安全轉型，上面已防呆
+                    item_price = int(row['price']) 
                     
                     with st.container(border=True):
                         st.markdown(f"""
@@ -197,7 +196,7 @@ def show():
                             "數量", min_value=0, step=1, value=0, 
                             key=f"sashimi_plan_{row['item_id']}", label_visibility="collapsed"
                         )
-                st.markdown('</div>', unsafe_allow_html=True) # 關閉區塊
+                st.markdown('</div>', unsafe_allow_html=True) 
 
         if "sashimi_temp_items" not in st.session_state: st.session_state.sashimi_temp_items = []
         with st.expander("📝 客製化需求？手動輸入【單次臨時品項】"):
@@ -224,10 +223,11 @@ def show():
                 st.rerun()
             st.markdown("</div><br>", unsafe_allow_html=True)
 
-        note = st.text_input("📝 備註事項", placeholder="例如：切魚-阿君...", key="sashimi_plan_note")
+        note = st.text_input("📝 備註事項 (人員排班或特殊交代)", placeholder="例如：切魚-阿君...", key="sashimi_plan_note")
         
         if st.session_state.get('sashimi_plan_msg'):
-            st.success(f"✅ {target_date_str} 的出餐計畫已成功存檔！")
+            # 🌟 成功畫面顯示有星期幾的日期
+            st.success(f"✅ {target_date_display} 的出餐計畫已成功存檔！")
             st.link_button("🚀 打開 LINE APP 發送", url=st.session_state['sashimi_plan_url'], type="primary", use_container_width=True)
             st.info("💻 **電腦版請點擊右上角複製貼到 LINE：**")
             st.code(st.session_state['sashimi_plan_msg'], language="text")
@@ -250,6 +250,7 @@ def show():
                 cart_dict = {}
                 current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 
+                # 存資料庫用純日期 (target_date_str)
                 for item in valid_items:
                     cart_key = f"{item['item_id']}_{item['name']}"
                     cart_dict[cart_key] = {
@@ -269,8 +270,8 @@ def show():
                 with st.spinner("訂單存檔中..."):
                     save_ordered_data(target_date_str, cart_dict)
                 
-                # 🌟 LINE 訊息自動分區排版
-                msg = f"🔪 【阿布潘-生魚片部】 🐟\n🗓️ 出餐日期：{target_date_str}\n👨‍💻 填表人員：{current_user}\n──────────────────\n📋 【預估出餐明細】\n"
+                # 🌟 LINE 訊息加入包含星期幾的日期
+                msg = f"🔪 【阿布潘-生魚片部】 🐟\n🗓️ 出餐日期：{target_date_display}\n👨‍💻 填表人員：{current_user}\n──────────────────\n📋 【預估出餐明細】\n"
                 total_plan_qty = 0
                 
                 for g_name in ["生魚片區", "小品區", "臨時客製區"]:
@@ -294,7 +295,12 @@ def show():
     # ==========================================
     with tab_report:
         report_date = st.date_input("📌 選擇回報日期", value=today, key="sashimi_report_date")
+        
+        # 資料庫存檔用的純日期
         date_str = report_date.strftime("%Y-%m-%d")
+        # 🌟 UI 與 LINE 顯示用的日期包含星期幾
+        report_weekday = ["週一", "週二", "週三", "週四", "週五", "週六", "週日"][report_date.weekday()]
+        report_date_display = f"{date_str} ({report_weekday})"
         
         with st.spinner("讀取紀錄中..."):
             df_record = load_daily_record(date_str)
@@ -304,14 +310,13 @@ def show():
         if sashimi_records.empty:
             st.info(f"該日生魚片部尚無任何出餐紀錄。")
         else:
-            st.markdown(f"#### 📝 {date_str} 實際出餐回報表")
-            # 把分類屬性補進去
+            # 🌟 UI 標題加入星期幾
+            st.markdown(f"#### 📝 {report_date_display} 實際出餐回報表")
             sashimi_records['subcat'] = sashimi_records['item_id'].astype(str).map(lambda x: subcat_dict.get(x.split('_')[0], "生魚片區"))
             
             actual_updates = {} 
             report_qty_dict = {} 
             
-            # 🌟 回報畫面也自動分區顯示
             for group_name in ["生魚片區", "小品區", "臨時客製區"]:
                 group_records = sashimi_records[sashimi_records['subcat'] == group_name]
                 if not group_records.empty:
@@ -373,12 +378,12 @@ def show():
                     with st.spinner("儲存回報中..."):
                         batch_update_record_qty(date_str, actual_updates, current_user, current_time)
                 
-                msg = f"🔪 【阿布潘-生魚片部】 🐟\n🗓️ 出餐日期：{date_str}\n👨‍💻 回報人員：{current_user}\n──────────────────\n📋 【本日實際出餐數量】\n"
+                # 🌟 LINE 訊息加入包含星期幾的日期
+                msg = f"🔪 【阿布潘-生魚片部】 🐟\n🗓️ 出餐日期：{report_date_display}\n👨‍💻 回報人員：{current_user}\n──────────────────\n📋 【本日實際出餐數量】\n"
                 
                 total_o_qty = 0
                 total_a_qty = 0
                 
-                # 🌟 LINE 訊息也進行分區顯示
                 for g_name in ["生魚片區", "小品區", "臨時客製區"]:
                     g_items = {k: d for k, d in report_qty_dict.items() if d['subcat'] == g_name}
                     if g_items:
