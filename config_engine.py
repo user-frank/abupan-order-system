@@ -21,7 +21,6 @@ def _get_worksheet(ws_name, headers):
         return None
 
 def _sync_sheet(sheet, df, default_headers):
-    """把資料覆寫回雲端 (100% 兼容所有版本)"""
     try:
         sheet.clear()
         if df.empty:
@@ -45,7 +44,6 @@ def _sync_sheet(sheet, df, default_headers):
 # ==========================================
 # 1. 常態菜單 (白名單) 存取 
 # ==========================================
-# 🌟 神器在這裡：把讀取結果記在記憶體 1 個小時，大幅減少 API 請求！
 @st.cache_data(ttl=3600, show_spinner=False)
 def load_menu_template(dept_name):
     headers = ["部門", "item_id"]
@@ -74,11 +72,7 @@ def save_menu_template(dept_name, item_ids):
             else: df = pd.concat([df, pd.DataFrame(new_rows)], ignore_index=True)
             
         success = _sync_sheet(sheet, df, headers)
-        
-        # 🌟 寫入成功後，立刻把大腦裡的舊記憶刪除，這樣下次畫面重整就會去抓最新的！
-        if success:
-            load_menu_template.clear() 
-            
+        if success: load_menu_template.clear() 
         return success
     except Exception as e:
         st.error(f"❌ 儲存常態菜單失敗: {e}")
@@ -88,7 +82,6 @@ def save_menu_template(dept_name, item_ids):
 # ==========================================
 # 2. 自訂商品 (新產品) 存取 
 # ==========================================
-# 🌟 神器在這裡：快取自訂商品清單
 @st.cache_data(ttl=3600, show_spinner=False)
 def load_custom_items(dept_name):
     headers = ["部門", "item_id", "品名"]
@@ -117,13 +110,48 @@ def save_custom_items(dept_name, items):
             else: df = pd.concat([df, pd.DataFrame(new_rows)], ignore_index=True)
             
         success = _sync_sheet(sheet, df, headers)
-        
-        # 🌟 寫入成功後，清除快取
-        if success:
-            load_custom_items.clear()
-            
+        if success: load_custom_items.clear()
         return success
     except Exception as e:
         st.error(f"❌ 儲存自訂商品過程發生錯誤: {e}")
+        st.stop()
+        return False
+
+# ==========================================
+# 3. 🌟 新增：子分類設定 (生魚片 vs 小品)
+# ==========================================
+@st.cache_data(ttl=3600, show_spinner=False)
+def load_subcategories(dept_name):
+    headers = ["部門", "item_id", "子分類"]
+    sheet = _get_worksheet("設定_子分類", headers)
+    if not sheet: return {}
+    try:
+        df = pd.DataFrame(sheet.get_all_records())
+        if df.empty: return {}
+        dept_df = df[df["部門"] == dept_name]
+        # 回傳字典：{"80001": "生魚片區", "80009": "小品區"}
+        return dict(zip(dept_df['item_id'].astype(str), dept_df['子分類'].astype(str)))
+    except:
+        return {}
+
+def save_subcategories(dept_name, subcat_dict):
+    headers = ["部門", "item_id", "子分類"]
+    sheet = _get_worksheet("設定_子分類", headers)
+    if not sheet: return False
+    try:
+        df = pd.DataFrame(sheet.get_all_records())
+        if not df.empty and "部門" in df.columns:
+            df = df[df["部門"] != dept_name]
+            
+        new_rows = [{"部門": dept_name, "item_id": str(k), "子分類": str(v)} for k, v in subcat_dict.items()]
+        if new_rows:
+            if df.empty: df = pd.DataFrame(new_rows)
+            else: df = pd.concat([df, pd.DataFrame(new_rows)], ignore_index=True)
+            
+        success = _sync_sheet(sheet, df, headers)
+        if success: load_subcategories.clear()
+        return success
+    except Exception as e:
+        st.error(f"❌ 儲存分類設定發生錯誤: {e}")
         st.stop()
         return False
