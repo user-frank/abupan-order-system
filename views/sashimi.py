@@ -41,14 +41,14 @@ def show():
     </style>
     """, unsafe_allow_html=True)
     
-    st.markdown("### 🔪 生魚片部 - 專屬工作區")
+    st.markdown("### 🔪 生魚片部- 專屬工作區")
     
     # ------------------------------------------
     # 🛡️ 資料強效載入與防呆區
     # ------------------------------------------
     df, _ = load_sales_data()
     if df.empty:
-        st.warning("⚠️ 無法讀取 ERP 商品資料。")
+        st.warning("⚠️ 無法讀取商品資料。")
         return
         
     sashimi_df = df[df['cat'] == '生魚片'].copy()
@@ -151,7 +151,7 @@ def show():
                 st.rerun()
 
             st.divider()
-            st.markdown("#### 3️⃣ 新增「ERP 尚未建檔」的新產品")
+            st.markdown("#### 3️⃣ 新增新產品")
             col_id, col_name, col_btn = st.columns([2, 4, 2])
             with col_id: new_c_id = st.text_input("自訂編號", key="sashimi_new_c_id")
             with col_name: new_c_name = st.text_input("商品名稱", key="sashimi_new_c_name")
@@ -271,7 +271,7 @@ def show():
                     save_ordered_data(target_date_str, cart_dict)
                 
                 # 🌟 LINE 訊息加入包含星期幾的日期
-                msg = f"🔪 【阿布潘-生魚片部】 🐟\n🗓️ 出餐日期：{target_date_display}\n👨‍💻 填表人員：{current_user}\n──────────────────\n📋 【預估出餐明細】\n"
+                msg = f"🔪 【阿布潘-生魚片部】 🐟\n🗓️ 出餐日：{target_date_display}\n👨‍💻 填表人：{current_user}\n──────────────────\n📋 【預估出餐明細】\n"
                 total_plan_qty = 0
                 
                 for g_name in ["生魚片區", "小品區", "臨時客製區"]:
@@ -379,7 +379,7 @@ def show():
                         batch_update_record_qty(date_str, actual_updates, current_user, current_time)
                 
                 # 🌟 LINE 訊息加入包含星期幾的日期
-                msg = f"🔪 【阿布潘-生魚片部】 🐟\n🗓️ 出餐日期：{report_date_display}\n👨‍💻 回報人員：{current_user}\n──────────────────\n📋 【本日實際出餐數量】\n"
+                msg = f"🔪 【阿布潘-生魚片部】 🐟\n🗓️ 出餐日：{report_date_display}\n👨‍💻 回報人：{current_user}\n──────────────────\n📋 【本日實際出餐數量】\n"
                 
                 total_o_qty = 0
                 total_a_qty = 0
