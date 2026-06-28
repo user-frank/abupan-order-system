@@ -4,6 +4,9 @@ import gspread
 from google.oauth2.service_account import Credentials
 import os
 
+# ==========================================
+# ☁️ 雲端資料庫設定
+# ==========================================
 SHEET_NAME = "阿布潘出餐系統_雲端資料庫"
 WORKSHEET_NAME = "daily_records"
 
@@ -45,7 +48,6 @@ def _get_cloud_dataframe(sheet):
         data = sheet.get_all_records()
         df = pd.DataFrame(data)
         
-        # 🌟 擴充欄位：加入了 price(單價) 與 pos_revenue(POS實際營收)
         expected_cols = ['date', 'cart_key', 'item_id', 'name', 'cat', 'ordered_qty', 'actual_qty', 'pos_qty', 'pos_revenue', 'price', 'plan_operator', 'plan_time', 'report_operator', 'report_time']
         
         if df.empty:
@@ -55,7 +57,6 @@ def _get_cloud_dataframe(sheet):
                 sheet.append_row(headers)
             df = pd.DataFrame(columns=headers)
             
-        # 🛡️ 向後相容防護：舊資料自動補齊新欄位
         for col in ['plan_operator', 'plan_time', 'report_operator', 'report_time']:
             if col not in df.columns: df[col] = "未記錄"
         for col in ['pos_revenue', 'price']:
@@ -66,8 +67,9 @@ def _get_cloud_dataframe(sheet):
             
         return df
     except Exception as e:
-        st.error(f"❌ 讀取雲端資料失敗: {e}")
-        return pd.DataFrame()
+        # 🚨 【核心防護修復】：發生錯誤時，回傳 None 而不是空的表單！
+        st.error(f"❌ 讀取雲端資料發生異常: {e}")
+        return None
 
 def _sync_to_cloud(sheet, df):
     try:
@@ -94,7 +96,10 @@ def load_daily_record(date_str):
     if not sheet: return pd.DataFrame()
     
     df = _get_cloud_dataframe(sheet)
-    if df.empty: return df
+    
+    # 防護：如果回傳 None，代表讀取失敗，回傳空表給前端顯示，但絕不覆寫
+    if df is None or df.empty: 
+        return pd.DataFrame()
     
     df_filtered = df[df['date'] == str(date_str)].copy()
     if 'cart_key' not in df_filtered.columns and 'item_id' in df_filtered.columns:
@@ -108,6 +113,11 @@ def save_ordered_data(date_str, cart_items):
     
     df = _get_cloud_dataframe(sheet)
     
+    # 🛡️ 【絕對防護鎖】：如果讀取失敗，強制攔截存檔動作，保護歷史資料！
+    if df is None:
+        st.error("🚨 雲端資料庫連線不穩！為保護歷史資料安全，已自動攔截本次存檔。請稍後再試！")
+        return
+    
     for cart_key, item in cart_items.items():
         mask = (df['date'] == str(date_str)) & (df['cart_key'] == str(cart_key))
         if mask.any():
@@ -115,6 +125,7 @@ def save_ordered_data(date_str, cart_items):
             df.at[idx, 'ordered_qty'] = int(item['qty'])
             df.at[idx, 'plan_operator'] = str(item.get('operator', '未記錄'))
             df.at[idx, 'plan_time'] = str(item.get('update_time', '未記錄'))
+            df.at[idx, 'price'] = int(item.get('price', 0))
         else:
             new_row = {
                 'date': str(date_str),
@@ -125,8 +136,8 @@ def save_ordered_data(date_str, cart_items):
                 'ordered_qty': int(item['qty']),
                 'actual_qty': 0,
                 'pos_qty': 0,
-                'pos_revenue': 0, # 預設營收 0
-                'price': 0,       # 預設單價 0，未來由 ERP 寫入
+                'pos_revenue': 0, 
+                'price': int(item.get('price', 0)), 
                 'plan_operator': str(item.get('operator', '未記錄')),
                 'plan_time': str(item.get('update_time', '未記錄')),
                 'report_operator': "未記錄",
@@ -143,6 +154,9 @@ def update_record_qty(date_str, cart_key, field, new_qty):
     sheet = get_worksheet()
     if not sheet: return
     df = _get_cloud_dataframe(sheet)
+    
+    if df is None: return # 🛡️ 防護鎖
+    
     mask = (df['date'] == str(date_str)) & (df['cart_key'] == str(cart_key))
     if mask.any():
         idx = df[mask].index[0]
@@ -153,6 +167,9 @@ def delete_order_item(date_str, cart_key):
     sheet = get_worksheet()
     if not sheet: return
     df = _get_cloud_dataframe(sheet)
+    
+    if df is None: return # 🛡️ 防護鎖
+    
     mask = (df['date'] == str(date_str)) & (df['cart_key'] == str(cart_key))
     if mask.any():
         df = df[~mask]
@@ -162,8 +179,13 @@ def batch_update_record_qty(date_str, updates_dict, current_user="", current_tim
     sheet = get_worksheet()
     if not sheet: return
     df = _get_cloud_dataframe(sheet)
-    updated = False
     
+    # 🛡️ 絕對防護鎖
+    if df is None:
+        st.error("🚨 雲端資料庫連線不穩！為保護歷史資料安全，已自動攔截本次回報。請稍後再試！")
+        return 
+        
+    updated = False
     for cart_key, new_qty in updates_dict.items():
         mask = (df['date'] == str(date_str)) & (df['cart_key'] == str(cart_key))
         if mask.any():
