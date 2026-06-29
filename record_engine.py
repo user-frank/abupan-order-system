@@ -3,6 +3,7 @@ import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
 import os
+import time  # 🌟 新增時間模組，用來控制重試的冷卻時間
 
 # ==========================================
 # ☁️ 雲端資料庫設定
@@ -65,11 +66,11 @@ def _get_cloud_dataframe(sheet):
         if 'cart_key' in df.columns: df['cart_key'] = df['cart_key'].astype(str)
         if 'date' in df.columns: df['date'] = df['date'].astype(str)
         
-        # 🌟 【系統免疫力升級 1】：自動清除因為連線不穩產生的「幽靈表頭」
+        # 🌟 自動清除因為連線不穩產生的「幽靈表頭」
         if not df.empty and 'date' in df.columns:
             df = df[df['date'] != 'date'].copy()
             
-        # 🌟 【系統免疫力升級 2】：自動清除「連點按鈕」造成的重複商品，永遠只保留最後一次的紀錄！
+        # 🌟 自動清除「連點按鈕」造成的重複商品，永遠只保留最後一次的紀錄！
         if not df.empty and 'date' in df.columns and 'cart_key' in df.columns:
             df = df.drop_duplicates(subset=['date', 'cart_key'], keep='last')
             
@@ -79,21 +80,29 @@ def _get_cloud_dataframe(sheet):
         return None
 
 def _sync_to_cloud(sheet, df):
-    try:
-        sheet.clear()
-        df_safe = df.fillna("")
-        headers = df_safe.columns.astype(str).values.tolist()
-        body = df_safe.astype(str).values.tolist()
-        data_to_upload = [headers] + body
-        
+    df_safe = df.fillna("")
+    headers = df_safe.columns.astype(str).values.tolist()
+    body = df_safe.astype(str).values.tolist()
+    data_to_upload = [headers] + body
+    
+    # 🛡️ 【終極防護：指數退避重試機制】
+    # 避免遇到 API 429 限制時，clear() 執行了但 update() 失敗導致資料庫被清空
+    max_retries = 5
+    for attempt in range(max_retries):
         try:
-            sheet.update(data_to_upload)
-        except Exception:
-            sheet.update('A1', data_to_upload)
-            
-    except Exception as e:
-        print(f"\n❌ [系統警告] 雲端同步失敗，原因：{e}\n")
-        st.error(f"❌ 雲端同步失敗：{e}")
+            sheet.clear()
+            try:
+                sheet.update(data_to_upload)
+            except Exception:
+                sheet.update('A1', data_to_upload)
+            return # 🌟 成功寫入，安全下莊！
+        except Exception as e:
+            if attempt < max_retries - 1:
+                # 遇到錯誤，讓系統冷卻一下 (1秒, 2秒, 4秒...) 再試
+                time.sleep(2 ** attempt) 
+            else:
+                print(f"\n❌ [系統警告] 雲端同步失敗，原因：{e}\n")
+                st.error(f"❌ 雲端同步失敗，請稍後重新點擊存檔：{e}")
 
 # ==========================================
 # 系統核心存取功能
@@ -104,6 +113,7 @@ def load_daily_record(date_str):
     
     df = _get_cloud_dataframe(sheet)
     
+    # 防護：如果回傳 None，代表讀取失敗，回傳空表給前端顯示，但絕不覆寫
     if df is None or df.empty: 
         return pd.DataFrame()
     
@@ -119,6 +129,7 @@ def save_ordered_data(date_str, cart_items):
     
     df = _get_cloud_dataframe(sheet)
     
+    # 🛡️ 【絕對防護鎖】：如果讀取失敗，強制攔截存檔動作，保護歷史資料！
     if df is None:
         st.error("🚨 雲端資料庫連線不穩！為保護歷史資料安全，已自動攔截本次存檔。請稍後再試！")
         return
@@ -160,7 +171,7 @@ def update_record_qty(date_str, cart_key, field, new_qty):
     if not sheet: return
     df = _get_cloud_dataframe(sheet)
     
-    if df is None: return 
+    if df is None: return # 🛡️ 防護鎖
     
     mask = (df['date'] == str(date_str)) & (df['cart_key'] == str(cart_key))
     if mask.any():
@@ -173,7 +184,7 @@ def delete_order_item(date_str, cart_key):
     if not sheet: return
     df = _get_cloud_dataframe(sheet)
     
-    if df is None: return 
+    if df is None: return # 🛡️ 防護鎖
     
     mask = (df['date'] == str(date_str)) & (df['cart_key'] == str(cart_key))
     if mask.any():
@@ -185,6 +196,7 @@ def batch_update_record_qty(date_str, updates_dict, current_user="", current_tim
     if not sheet: return
     df = _get_cloud_dataframe(sheet)
     
+    # 🛡️ 絕對防護鎖
     if df is None:
         st.error("🚨 雲端資料庫連線不穩！為保護歷史資料安全，已自動攔截本次回報。請稍後再試！")
         return 
