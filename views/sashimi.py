@@ -300,7 +300,7 @@ def show():
                     if g_items:
                         msg += f"\n📁 [{g_name}]\n"
                         for d in g_items:
-                            msg += f"🔸 {d['name']} ➜ {d['qty']} 份\n"
+                            msg += f"{d['name']} ➜ {d['qty']} 份\n"
                             total_plan_qty += d['qty']
                 
                 msg += f"\n(今日預估總份數 = {total_plan_qty} 份)\n"
