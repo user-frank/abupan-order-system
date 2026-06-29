@@ -104,7 +104,6 @@ def render_ai_assistant(dept_name, display_df):
             menu_info = ""
             for _, row in display_df.iterrows():
                 item_price = int(row.get('price', 0))
-                # 偷偷把均銷傳給 AI
                 wd_avg = row.get('wd_avg', 0) 
                 cat_prefix = f"[{row.get('cat', dept_name)}] " if dept_name == "總管理處" else ""
                 menu_info += f"- {cat_prefix}{row['name']} (單價: {item_price}元, 歷史長期平日均銷: {wd_avg}份)\n"
@@ -151,9 +150,9 @@ def render_ai_assistant(dept_name, display_df):
                         3. 回答要專業、有說服力（必須引述你看到的歷史耗損數據，或是你算出的營業額），並加上 Emoji 讓排版好讀。
                         """
 
-                        # 🌟 修復 1.5-flash 的呼叫方式，拔除不支援的聯網工具
+                        # 🌟 徹底修復：回歸最穩定、支援系統指令的標準模型，拔除容易報錯的聯網套件
                         model = genai.GenerativeModel(
-                            model_name='gemini-1.5-flash-latest', # 使用 latest 確保抓到最新版
+                            model_name='gemini-1.5-flash', 
                             system_instruction=system_instruction
                         )
                         
