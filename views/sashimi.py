@@ -6,7 +6,6 @@ from data_engine import load_sales_data
 from record_engine import save_ordered_data, load_daily_record, batch_update_record_qty
 from bom_engine import calculate_bom
 
-# 🌟 導入雲端設定引擎
 from config_engine import load_menu_template, save_menu_template, load_custom_items, save_custom_items, load_subcategories, save_subcategories
 
 def show():
@@ -15,7 +14,6 @@ def show():
     
     today = datetime.date.today() 
     
-    # CSS 黑魔法：強制手機版維持「雙排顯示」
     st.markdown("""
     <style>
     .grid-container {
@@ -51,10 +49,7 @@ def show():
         return
         
     sashimi_df = df[df['cat'] == '生魚片'].copy()
-    if sashimi_df.empty:
-        st.info("💡 系統提示：目前 ERP 裡沒有標示為『生魚片』的商品，你可以點擊下方『系統設定』手動新增。")
-        
-    # 🛡️【終極防護】：強制把單價補 0，並將編號與品名轉換為字串，徹底消滅 AttributeError
+    
     if 'price' not in sashimi_df.columns:
         sashimi_df['price'] = 0
     sashimi_df['price'] = pd.to_numeric(sashimi_df['price'], errors='coerce').fillna(0).astype(int)
@@ -68,13 +63,12 @@ def show():
         custom_df['wd_avg'] = 0.0 
         custom_df['price'] = 0  
         custom_df['item_id'] = custom_df['item_id'].astype(str) 
-        custom_df['name'] = custom_df['name'].astype(str) # 同樣防護自訂商品
+        custom_df['name'] = custom_df['name'].astype(str)
         sashimi_df = pd.concat([sashimi_df, custom_df], ignore_index=True)
 
     sashimi_df = sashimi_df.drop_duplicates(subset=['item_id'], keep='last')
     sashimi_df = sashimi_df.sort_values(by='item_id') 
 
-    # 讀取分類標籤
     subcat_dict = load_subcategories(DEPT_NAME)
     sashimi_df['subcat'] = sashimi_df['item_id'].map(lambda x: subcat_dict.get(x, "生魚片區"))
 
@@ -119,7 +113,6 @@ def show():
                 with st.container(height=200):
                     new_selected_ids = []
                     for idx, opt in enumerate(all_item_options):
-                        # 🛡️ 雙重保險：強制轉字串再做 split，絕對不當機
                         opt_id = str(opt).split(" - ")[0]
                         is_checked = opt_id in active_item_ids
                         if st.checkbox(str(opt), value=is_checked, key=f"chk_sashimi_menu_{opt_id}_{idx}"):
@@ -132,7 +125,6 @@ def show():
 
             st.divider()
             st.markdown("#### 2️⃣ 商品分類設定 (生魚片 vs 小品)")
-            st.markdown("<p style='font-size:12px;color:#888;'>在此調整商品所屬的分類區域，出餐表與 LINE 訊息將會自動切塊顯示。</p>", unsafe_allow_html=True)
             
             display_subcat_df = sashimi_df[sashimi_df['item_id'].isin(active_item_ids)][['item_id', 'name', 'subcat']].copy()
             
@@ -155,10 +147,10 @@ def show():
                 st.rerun()
 
             st.divider()
-            st.markdown("#### 3️⃣ 新增新產品")
+            st.markdown("#### 3️⃣ 新增的新產品")
             col_id, col_name, col_btn = st.columns([2, 4, 2])
-            with col_id: new_c_id = st.text_input("自訂編號 (選填)", placeholder="例: N001", key="sashimi_new_c_id")
-            with col_name: new_c_name = st.text_input("新商品名稱 (必填)", placeholder="例: 鮭魚特製", key="sashimi_new_c_name")
+            with col_id: new_c_id = st.text_input("自訂編號 (選填)", key="sashimi_new_c_id")
+            with col_name: new_c_name = st.text_input("新商品名稱 (必填)", key="sashimi_new_c_name")
             with col_btn:
                 st.markdown("<div style='margin-top:28px;'></div>", unsafe_allow_html=True)
                 if st.button("➕ 加入系統", type="primary", use_container_width=True, key="btn_sashimi_add_custom"):
@@ -169,14 +161,12 @@ def show():
                         
                         existing_ids = sashimi_df['item_id'].values
                         if final_id in existing_ids:
-                            st.error(f"❌ 錯誤：編號 '{final_id}' 已存在於系統中，請更換一個編號！")
+                            st.error(f"❌ 錯誤：編號 '{final_id}' 已存在於系統中！")
                         else:
                             c_list = load_custom_items(DEPT_NAME)
                             c_list.append({"item_id": final_id, "name": new_c_name})
-                            
                             with st.spinner(f"正在將 {new_c_name} 寫入 ..."):
                                 success1 = save_custom_items(DEPT_NAME, c_list)
-                                
                                 active_list = load_menu_template(DEPT_NAME) or []
                                 if final_id not in active_list:
                                     active_list.append(final_id)
@@ -185,7 +175,7 @@ def show():
                                     success2 = True
                                     
                             if success1 and success2:
-                                st.success(f"✅ {new_c_name} 已成功加入雲端！")
+                                st.success(f"✅ {new_c_name} 已成功加入！")
                                 st.rerun()
         
         display_df = sashimi_df[sashimi_df['item_id'].isin(active_item_ids)].copy()
@@ -193,7 +183,6 @@ def show():
         st.markdown(f"#### 📊 出餐計畫表 (共 {len(display_df)} 項)")
         plan_qty_dict = {} 
         
-        # 🌟 自動將畫面切成「生魚片區」與「小品區」
         for group_name in ["生魚片區", "小品區"]:
             group_df = display_df[display_df['subcat'] == group_name]
             if not group_df.empty:
@@ -222,12 +211,11 @@ def show():
                 st.markdown('</div>', unsafe_allow_html=True) 
 
         if "sashimi_temp_items" not in st.session_state: st.session_state.sashimi_temp_items = []
-
         with st.expander("📝 客製化需求？手動輸入【單次臨時品項】"):
             col1, col2, col3 = st.columns([2, 4, 2])
-            with col1: temp_id = st.text_input("編號 (選填)", key="sashimi_temp_id", placeholder="例如: 999")
-            with col2: temp_name = st.text_input("品名 (必填)", key="sashimi_temp_name", placeholder="例如: 鮭魚特製")
-            with col3: temp_qty = st.number_input("數量", min_value=1, step=1, key="sashimi_temp_qty")
+            with col1: temp_id = st.text_input("編號 (選填)", key="s_temp_id", placeholder="例如: 999")
+            with col2: temp_name = st.text_input("品名 (必填)", key="s_temp_name", placeholder="例如: 鮭魚去鱗特製版")
+            with col3: temp_qty = st.number_input("數量", min_value=1, step=1, key="s_temp_qty")
             
             if st.button("➕ 加入本次訂單", use_container_width=True, key="sashimi_btn_add_temp"):
                 if temp_name.strip() != "":
@@ -242,12 +230,13 @@ def show():
             st.markdown("##### 🛒 本次臨時客製清單")
             for idx, item in enumerate(st.session_state.sashimi_temp_items):
                 st.markdown(f"- {item['name']} ➜ **{item['qty']} 份**")
-            if st.button("🗑️ 清除臨時清單", size="small", key="sashimi_btn_clear_temp"):
+            # 🌟 修復處：移除 size="small"，避免 TypeError 當機
+            if st.button("🗑️ 清除臨時清單", key="sashimi_btn_clear_temp"):
                 st.session_state.sashimi_temp_items = []
                 st.rerun()
             st.markdown("</div><br>", unsafe_allow_html=True)
 
-        note = st.text_input("📝 備註事項 (人員排班或特殊交代)", placeholder="例如：切魚-阿君...", key="sashimi_plan_note")
+        note = st.text_input("📝 備註事項", placeholder="例如：切魚-阿君...", key="sashimi_plan_note")
         
         if st.session_state.get('sashimi_plan_msg'):
             st.success(f"✅ {target_date_display} 的出餐計畫已成功存檔！")
@@ -300,7 +289,7 @@ def show():
                     if g_items:
                         msg += f"\n📁 [{g_name}]\n"
                         for d in g_items:
-                            msg += f"{d['name']} ➜ {d['qty']} 份\n"
+                            msg += f" {d['name']} ➜ {d['qty']} 份\n"
                             total_plan_qty += d['qty']
                 
                 msg += f"\n(今日預估總份數 = {total_plan_qty} 份)\n"
@@ -329,7 +318,6 @@ def show():
             st.info(f"該日生魚片部尚無任何出餐紀錄。")
         else:
             st.markdown(f"#### 📝 {report_date_display} 實際出餐回報表")
-            
             sashimi_records['subcat'] = sashimi_records['item_id'].astype(str).map(lambda x: subcat_dict.get(x.split('_')[0], "生魚片區"))
             
             actual_updates = {} 
