@@ -152,7 +152,7 @@ def render_ai_assistant(dept_name, display_df):
 
                         # 🌟 徹底修復：回歸最穩定、支援系統指令的標準模型，拔除容易報錯的聯網套件
                         model = genai.GenerativeModel(
-                            model_name='gemini-1.5-flash', 
+                            model_name='gemini-2.5-flash', 
                             system_instruction=system_instruction
                         )
                         
