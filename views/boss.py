@@ -145,4 +145,8 @@ def show():
             reported_items = len(display_df[display_df['實際回報'] > 0])
             st.caption(f"💡 數據總覽：共 {total_items} 個品項，已有 {reported_items} 項完成實際回報。")
 
-render_ai_assistant(DEPT_NAME, display_df)
+    st.divider()
+
+    render_ai_assistant("總管理處", df_sales)
+
+
