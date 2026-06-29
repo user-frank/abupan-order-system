@@ -223,7 +223,7 @@ def show():
             st.markdown("##### 🛒 本次臨時客製清單")
             for idx, item in enumerate(st.session_state.sushi_temp_items):
                 st.markdown(f"- {item['name']} ➜ **{item['qty']} 份**")
-            if st.button("🗑️ 清除臨時清單", size="small", key="sushi_btn_clear_temp"):
+            if st.button("🗑️ 清除臨時清單", key="sushi_btn_clear_temp"):
                 st.session_state.sushi_temp_items = []
                 st.rerun()
             st.markdown("</div><br>", unsafe_allow_html=True)
