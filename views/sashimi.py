@@ -12,8 +12,10 @@ from config_engine import load_menu_template, save_menu_template, load_custom_it
 def show():
     current_user = st.session_state.get("user_name", "未知操作員")
     DEPT_NAME = "生魚片" 
+    
     today = datetime.date.today() 
     
+    # CSS 黑魔法：強制手機版維持「雙排顯示」
     st.markdown("""
     <style>
     .grid-container {
@@ -41,22 +43,23 @@ def show():
     </style>
     """, unsafe_allow_html=True)
     
-    st.markdown("### 🔪 生魚片部- 專屬工作區")
+    st.markdown("### 🔪 生魚片部 - 專屬工作區")
     
-    # ------------------------------------------
-    # 🛡️ 資料強效載入與防呆區
-    # ------------------------------------------
     df, _ = load_sales_data()
     if df.empty:
-        st.warning("⚠️ 無法讀取商品資料。")
+        st.warning("⚠️ 無法讀取 ERP 商品資料。")
         return
         
     sashimi_df = df[df['cat'] == '生魚片'].copy()
-    
+    if sashimi_df.empty:
+        st.info("💡 系統提示：目前 ERP 裡沒有標示為『生魚片』的商品，你可以點擊下方『系統設定』手動新增。")
+        
+    # 🛡️【終極防護】：強制把單價補 0，並將編號與品名轉換為字串，徹底消滅 AttributeError
     if 'price' not in sashimi_df.columns:
         sashimi_df['price'] = 0
     sashimi_df['price'] = pd.to_numeric(sashimi_df['price'], errors='coerce').fillna(0).astype(int)
     sashimi_df['item_id'] = sashimi_df['item_id'].astype(str)
+    sashimi_df['name'] = sashimi_df['name'].astype(str)
 
     custom_items = load_custom_items(DEPT_NAME)
     if custom_items:
@@ -65,11 +68,13 @@ def show():
         custom_df['wd_avg'] = 0.0 
         custom_df['price'] = 0  
         custom_df['item_id'] = custom_df['item_id'].astype(str) 
+        custom_df['name'] = custom_df['name'].astype(str) # 同樣防護自訂商品
         sashimi_df = pd.concat([sashimi_df, custom_df], ignore_index=True)
 
     sashimi_df = sashimi_df.drop_duplicates(subset=['item_id'], keep='last')
     sashimi_df = sashimi_df.sort_values(by='item_id') 
 
+    # 讀取分類標籤
     subcat_dict = load_subcategories(DEPT_NAME)
     sashimi_df['subcat'] = sashimi_df['item_id'].map(lambda x: subcat_dict.get(x, "生魚片區"))
 
@@ -81,7 +86,7 @@ def show():
     with tab_plan:
         date_options = []
         date_mapping = {} 
-        weekdays_tw = ["週一", "週二", "週三", "週四", "週五", "週六", "週日"] # 定義星期轉換
+        weekdays_tw = ["週一", "週二", "週三", "週四", "週五", "週六", "週日"] 
         
         for i in range(0, 7):
             d = today + datetime.timedelta(days=i)
@@ -94,10 +99,7 @@ def show():
             date_mapping[label] = d.strftime("%Y-%m-%d")
 
         selected_date_label = st.selectbox("📌 選擇出餐日期", date_options, key="sashimi_plan_date")
-        
-        # 資料庫存檔用的純日期字串 (ex: 2026-06-28)
         target_date_str = date_mapping[selected_date_label]
-        # 🌟 UI 與 LINE 顯示用的日期字串 (ex: 2026-06-28 (週日))
         target_dt = datetime.datetime.strptime(target_date_str, "%Y-%m-%d")
         target_date_display = f"{target_date_str} ({weekdays_tw[target_dt.weekday()]})"
         
@@ -108,6 +110,7 @@ def show():
         active_item_ids = load_menu_template(DEPT_NAME)
         if active_item_ids is None:
             active_item_ids = sashimi_df['item_id'].tolist()
+        
         active_item_ids = [str(x) for x in active_item_ids]
         
         with st.expander("⚙️ 系統設定：自訂常態菜單 & 分類設定"):
@@ -116,9 +119,10 @@ def show():
                 with st.container(height=200):
                     new_selected_ids = []
                     for idx, opt in enumerate(all_item_options):
-                        opt_id = opt.split(" - ")[0]
-                        is_checked = str(opt_id) in active_item_ids
-                        if st.checkbox(opt, value=is_checked, key=f"chk_sashimi_menu_{opt_id}_{idx}"):
+                        # 🛡️ 雙重保險：強制轉字串再做 split，絕對不當機
+                        opt_id = str(opt).split(" - ")[0]
+                        is_checked = opt_id in active_item_ids
+                        if st.checkbox(str(opt), value=is_checked, key=f"chk_sashimi_menu_{opt_id}_{idx}"):
                             new_selected_ids.append(opt_id)
                 if st.form_submit_button("💾 儲存顯示設定", use_container_width=True):
                     with st.spinner("寫入中..."):
@@ -142,7 +146,7 @@ def show():
                     "subcat": st.column_config.SelectboxColumn("所屬類別 ✍️", options=["生魚片區", "小品區"], required=True)
                 }
             )
-            if st.button("💾 儲存分類標籤", use_container_width=True, key="btn_save_subcat"):
+            if st.button("💾 儲存分類標籤", use_container_width=True, key="sashimi_btn_save_subcat"):
                 new_subcat_dict = dict(zip(edited_subcat['item_id'].astype(str), edited_subcat['subcat']))
                 final_subcat_dict = {**subcat_dict, **new_subcat_dict}
                 with st.spinner("寫入中..."):
@@ -153,24 +157,43 @@ def show():
             st.divider()
             st.markdown("#### 3️⃣ 新增新產品")
             col_id, col_name, col_btn = st.columns([2, 4, 2])
-            with col_id: new_c_id = st.text_input("自訂編號", key="sashimi_new_c_id")
-            with col_name: new_c_name = st.text_input("商品名稱", key="sashimi_new_c_name")
+            with col_id: new_c_id = st.text_input("自訂編號 (選填)", placeholder="例: N001", key="sashimi_new_c_id")
+            with col_name: new_c_name = st.text_input("新商品名稱 (必填)", placeholder="例: 鮭魚特製", key="sashimi_new_c_name")
             with col_btn:
                 st.markdown("<div style='margin-top:28px;'></div>", unsafe_allow_html=True)
-                if st.button("➕ 加入", type="primary", use_container_width=True, key="btn_add_custom"):
-                    if new_c_name.strip():
+                if st.button("➕ 加入系統", type="primary", use_container_width=True, key="btn_sashimi_add_custom"):
+                    if not new_c_name.strip():
+                        st.error("商品名稱不能為空！")
+                    else:
                         final_id = new_c_id.strip() if new_c_id.strip() else f"NEW_{int(datetime.datetime.now().timestamp())}"
-                        c_list = load_custom_items(DEPT_NAME)
-                        c_list.append({"item_id": final_id, "name": new_c_name})
-                        save_custom_items(DEPT_NAME, c_list)
-                        st.success("✅ 新增成功！")
-                        st.rerun()
+                        
+                        existing_ids = sashimi_df['item_id'].values
+                        if final_id in existing_ids:
+                            st.error(f"❌ 錯誤：編號 '{final_id}' 已存在於系統中，請更換一個編號！")
+                        else:
+                            c_list = load_custom_items(DEPT_NAME)
+                            c_list.append({"item_id": final_id, "name": new_c_name})
+                            
+                            with st.spinner(f"正在將 {new_c_name} 寫入 ..."):
+                                success1 = save_custom_items(DEPT_NAME, c_list)
+                                
+                                active_list = load_menu_template(DEPT_NAME) or []
+                                if final_id not in active_list:
+                                    active_list.append(final_id)
+                                    success2 = save_menu_template(DEPT_NAME, active_list)
+                                else:
+                                    success2 = True
+                                    
+                            if success1 and success2:
+                                st.success(f"✅ {new_c_name} 已成功加入雲端！")
+                                st.rerun()
         
         display_df = sashimi_df[sashimi_df['item_id'].isin(active_item_ids)].copy()
         
         st.markdown(f"#### 📊 出餐計畫表 (共 {len(display_df)} 項)")
         plan_qty_dict = {} 
         
+        # 🌟 自動將畫面切成「生魚片區」與「小品區」
         for group_name in ["生魚片區", "小品區"]:
             group_df = display_df[display_df['subcat'] == group_name]
             if not group_df.empty:
@@ -180,12 +203,12 @@ def show():
                 st.markdown('<div class="grid-container">', unsafe_allow_html=True)
                 for _, row in group_df.iterrows():
                     clean_id = str(row['item_id']).split('_')[0]
-                    item_price = int(row['price']) 
+                    item_price = int(row.get('price', 0)) 
                     
                     with st.container(border=True):
                         st.markdown(f"""
                         <div style='margin-bottom: 8px;'>
-                            <div style='font-size:15px; font-weight:bold; color:white; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;' title='{row['name']}'>
+                            <div style='font-size:14px; font-weight:bold; color:white; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;' title='{row['name']}'>
                                 {row['name']} <span style='font-size:11px; color:#888; font-weight:normal;'>({clean_id})</span>
                             </div>
                             <div style='font-size:12px; color:#FFD93D; margin-top:2px;'>💰單價: ${item_price}</div>
@@ -199,11 +222,12 @@ def show():
                 st.markdown('</div>', unsafe_allow_html=True) 
 
         if "sashimi_temp_items" not in st.session_state: st.session_state.sashimi_temp_items = []
+
         with st.expander("📝 客製化需求？手動輸入【單次臨時品項】"):
             col1, col2, col3 = st.columns([2, 4, 2])
-            with col1: temp_id = st.text_input("編號 (選填)", key="s_temp_id", placeholder="例如: 999")
-            with col2: temp_name = st.text_input("品名 (必填)", key="s_temp_name", placeholder="例如: 鮭魚去鱗特製版")
-            with col3: temp_qty = st.number_input("數量", min_value=1, step=1, key="s_temp_qty")
+            with col1: temp_id = st.text_input("編號 (選填)", key="sashimi_temp_id", placeholder="例如: 999")
+            with col2: temp_name = st.text_input("品名 (必填)", key="sashimi_temp_name", placeholder="例如: 鮭魚特製")
+            with col3: temp_qty = st.number_input("數量", min_value=1, step=1, key="sashimi_temp_qty")
             
             if st.button("➕ 加入本次訂單", use_container_width=True, key="sashimi_btn_add_temp"):
                 if temp_name.strip() != "":
@@ -226,7 +250,6 @@ def show():
         note = st.text_input("📝 備註事項 (人員排班或特殊交代)", placeholder="例如：切魚-阿君...", key="sashimi_plan_note")
         
         if st.session_state.get('sashimi_plan_msg'):
-            # 🌟 成功畫面顯示有星期幾的日期
             st.success(f"✅ {target_date_display} 的出餐計畫已成功存檔！")
             st.link_button("🚀 打開 LINE APP 發送", url=st.session_state['sashimi_plan_url'], type="primary", use_container_width=True)
             st.info("💻 **電腦版請點擊右上角複製貼到 LINE：**")
@@ -242,7 +265,7 @@ def show():
             for _, row in display_df.iterrows():
                 qty = plan_qty_dict.get(row['item_id'], 0)
                 if qty > 0:
-                    valid_items.append({'item_id': str(row['item_id']), 'name': row['name'], 'qty': qty, 'price': int(row['price']), 'subcat': row['subcat']})
+                    valid_items.append({'item_id': str(row['item_id']), 'name': row['name'], 'qty': qty, 'price': int(row.get('price', 0)), 'subcat': row['subcat']})
             
             if not valid_items and not st.session_state.sashimi_temp_items:
                 st.warning("請至少輸入一項商品的數量！")
@@ -250,7 +273,6 @@ def show():
                 cart_dict = {}
                 current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 
-                # 存資料庫用純日期 (target_date_str)
                 for item in valid_items:
                     cart_key = f"{item['item_id']}_{item['name']}"
                     cart_dict[cart_key] = {
@@ -270,7 +292,6 @@ def show():
                 with st.spinner("訂單存檔中..."):
                     save_ordered_data(target_date_str, cart_dict)
                 
-                # 🌟 LINE 訊息加入包含星期幾的日期
                 msg = f"🔪 【阿布潘-生魚片部】 🐟\n🗓️ 日期：{target_date_display}\n👨‍💻 填表人：{current_user}\n──────────────────\n📋 【預估出餐明細】\n"
                 total_plan_qty = 0
                 
@@ -295,10 +316,7 @@ def show():
     # ==========================================
     with tab_report:
         report_date = st.date_input("📌 選擇回報日期", value=today, key="sashimi_report_date")
-        
-        # 資料庫存檔用的純日期
         date_str = report_date.strftime("%Y-%m-%d")
-        # 🌟 UI 與 LINE 顯示用的日期包含星期幾
         report_weekday = ["週一", "週二", "週三", "週四", "週五", "週六", "週日"][report_date.weekday()]
         report_date_display = f"{date_str} ({report_weekday})"
         
@@ -310,8 +328,8 @@ def show():
         if sashimi_records.empty:
             st.info(f"該日生魚片部尚無任何出餐紀錄。")
         else:
-            # 🌟 UI 標題加入星期幾
             st.markdown(f"#### 📝 {report_date_display} 實際出餐回報表")
+            
             sashimi_records['subcat'] = sashimi_records['item_id'].astype(str).map(lambda x: subcat_dict.get(x.split('_')[0], "生魚片區"))
             
             actual_updates = {} 
@@ -334,7 +352,7 @@ def show():
                             clean_id = str(row['item_id']).split('_')[0]
                             st.markdown(f"""
                             <div style='margin-bottom: 8px;'>
-                                <div style='font-size:15px; font-weight:bold; color:white; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;' title='{row['name']}'>
+                                <div style='font-size:14px; font-weight:bold; color:white; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;' title='{row['name']}'>
                                     {row['name']} <span style='font-size:11px; color:#888; font-weight:normal;'>({clean_id})</span>
                                 </div>
                                 <div style='font-size:12px; color:#FFD93D; margin-top:2px;'>💰單價: ${item_price} | 預估: <b>{ordered_qty}</b> 份</div>
@@ -378,7 +396,6 @@ def show():
                     with st.spinner("儲存回報中..."):
                         batch_update_record_qty(date_str, actual_updates, current_user, current_time)
                 
-                # 🌟 LINE 訊息加入包含星期幾的日期
                 msg = f"🔪 【阿布潘-生魚片部】 🐟\n🗓️ 日期：{report_date_display}\n👨‍💻 回報人：{current_user}\n──────────────────\n📋 【本日實際出餐數量】\n"
                 
                 total_o_qty = 0
