@@ -3,6 +3,7 @@ import pandas as pd
 import datetime
 from data_engine import load_sales_data
 from record_engine import load_daily_record
+from ai_engine import render_ai_assistant
 
 def show():
     st.markdown("## 📊 總管理-潘哥")
@@ -143,3 +144,5 @@ def show():
             total_items = len(display_df)
             reported_items = len(display_df[display_df['實際回報'] > 0])
             st.caption(f"💡 數據總覽：共 {total_items} 個品項，已有 {reported_items} 項完成實際回報。")
+
+render_ai_assistant(DEPT_NAME, display_df)
