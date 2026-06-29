@@ -25,7 +25,7 @@ def get_recent_7_days_history(dept_name):
         if df is None or df.empty: return "資料庫目前尚無歷史紀錄。"
         
         today = datetime.now()
-        past_7_days = [(today - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(1, 8)]
+        past_7_days = [(today - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(1, 10)]
         
         # 🌟 【最高權限解鎖】：如果老闆呼叫，就不限制部門，全部調閱！
         if dept_name == "總管理處":
@@ -76,11 +76,11 @@ def render_ai_assistant(dept_name, display_df):
     
     # 🌟 根據權限渲染不同的 UI 標題
     if dept_name == "總管理處":
-        st.markdown(f"#### 👑 總管理處 - 首席 AI 營運戰略幕僚")
+        st.markdown(f"#### 👑 阿布潘老闆-專屬AI助手")
         st.markdown(f"<p style='font-size:12px; color:#888;'>💡 擁有全公司最高讀取權限！支援跨部門營運分析與戰略建議。(本次登入剩餘額度: <span style='color:#f37021;font-weight:bold;'>{remaining_quota}</span> 次)</p>", unsafe_allow_html=True)
         placeholder_text = "例：幫我比較各部門最近哪項商品報廢最嚴重？並給出調整建議。"
     else:
-        st.markdown(f"#### 🤖 {dept_name}部 - AI 首席資料分析師 (大數據版)")
+        st.markdown(f"#### 🤖 {dept_name}部 - AI 首席資料分析師 ")
         st.markdown(f"<p style='font-size:12px; color:#888;'>💡 自動調閱過去7天歷史報廢紀錄給予精準備料建議！(剩餘額度: <span style='color:#f37021;font-weight:bold;'>{remaining_quota}</span> 次)</p>", unsafe_allow_html=True)
         placeholder_text = "例：根據過去7天歷史紀錄，建議我鮭魚跟甜蝦該備多少量？"
 
@@ -90,7 +90,7 @@ def render_ai_assistant(dept_name, display_df):
                 st.markdown(msg["content"])
 
         if st.session_state.ai_query_count >= 5:
-            st.warning("✋ 您本次的 AI 詢問額度已達上限。若需繼續提問，請重新登入！")
+            st.warning("✋ 您本次的 AI 詢問額度已達上限。若需繼續提問，請充值！")
             return
 
         prompt = st.chat_input(placeholder_text)
@@ -109,7 +109,7 @@ def render_ai_assistant(dept_name, display_df):
                 menu_info += f"- {cat_prefix}{row['name']} (單價: {item_price}元, 歷史長期平日均銷: {wd_avg}份)\n"
 
             with st.chat_message("assistant"):
-                with st.spinner("🤖 AI 正在調閱雲端歷史紀錄與精算中..."):
+                with st.spinner("🤖 思考回覆中 ..."):
                     try:
                         history_report = get_recent_7_days_history(dept_name)
                         
@@ -142,10 +142,10 @@ def render_ai_assistant(dept_name, display_df):
                         {history_report}
 
                         【你的專業分析任務指南 (極度重要)】：
-                        1. 【雙軌交叉比對】：你必須結合「長期平日均銷」與「過去 7 天真實耗損(做太多/做太少)」精算建議。
+                        1. 【雙軌交叉比對】：你必須結合「長期平日均銷」與「過去 10 天真實耗損(做太多/做太少)」精算建議。
                            - 基準線：以菜單資料庫中的「歷史長期平日均銷」為出發點。
-                           - 近期微調：如果過去 7 天紀錄顯示「⚠️做太多，累積報廢」，代表近期買氣衰退，請勇敢將建議數量砍低於歷史均銷。
-                           - 近期微調：如果過去 7 天紀錄顯示「🔥做太少，缺貨」，請建議增加備料。
+                           - 近期微調：如果過去 10 天紀錄顯示「⚠️做太多，累積報廢」，代表近期買氣衰退，請勇敢將建議數量砍低於歷史均銷。
+                           - 近期微調：如果過去 10 天紀錄顯示「🔥做太少，缺貨」，請建議增加備料。
                         2. 如果員工請你算出營業額，請確實將你建議的數量乘上菜單裡的單價，加總並加上千分位逗號。
                         3. 回答要專業、有說服力（必須引述你看到的歷史耗損數據，或是你算出的營業額），並加上 Emoji 讓排版好讀。
                         """
