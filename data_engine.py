@@ -29,7 +29,6 @@ def safe_read_csv(file_path, enc, retries=3, delay=0.2):
             time.sleep(delay)
 
 def extract_basic_data(df_blind):
-    """極簡版解析引擎：只抓編號、品名、單價，徹底廢除沒用的歷史數量"""
     try:
         header_idx = -1
         for idx, row in df_blind.iterrows():
@@ -47,8 +46,6 @@ def extract_basic_data(df_blind):
         cols = df.columns
         id_col = next((c for c in cols if '編號' in c or '品號' in c), None)
         n_col = next((c for c in cols if '品名' in c or '商品名稱' in c), None)
-        
-        # 🌟 自動識別單價欄位
         p_col = next((c for c in cols if '單價' in c or '價格' in c or 'price' in c), None)
         
         if not (id_col and n_col): return None
@@ -65,7 +62,6 @@ def extract_basic_data(df_blind):
         df = df[(df['name'] != '') & (df['name'] != 'nan') & (df['name'] != 'None')]
         df['item_id'] = df['item_id'].astype(str).str.upper().str.strip().str.replace(r'\.0$', '', regex=True)
         
-        # 🌟 安全氣囊：如果有單價欄位就轉成數字，如果沒有就預設為 0
         if 'price' in df.columns:
             df['price'] = pd.to_numeric(df['price'].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
         else:
@@ -124,30 +120,41 @@ def load_sales_data():
             
     if combined_list:
         final_df = pd.concat(combined_list, ignore_index=True)
+        final_df['item_id'] = final_df['item_id'].astype(str) # 🛡️ 確保基礎資料為字串
         final_df = final_df.drop_duplicates(subset=['item_id'], keep='last')
     else:
         final_df = pd.DataFrame(columns=['item_id', 'name', 'cat', 'price'])
         
-    # 🌟 雲端自動學習定價：從 daily_records 抓取最新的銷售單價來覆寫舊價格！
+    # ==========================================
+    # 🌟 雲端自動學習定價：精準型態配對版
+    # ==========================================
     try:
         sheet = get_worksheet()
         if sheet:
             cloud_df = _get_cloud_dataframe(sheet)
             if not cloud_df.empty and 'price' in cloud_df.columns:
+                # 確保雲端的 price 有意義
                 valid_price_df = cloud_df[pd.to_numeric(cloud_df['price'], errors='coerce') > 0].copy()
                 if not valid_price_df.empty:
                     valid_price_df = valid_price_df.sort_values(by='date', ascending=True)
-                    latest_prices = valid_price_df.groupby('item_id')['price'].last().to_dict()
                     
+                    # 🛡️【極度重要】：把雲端的 item_id 強制切割並轉成純字串，例如將 "80001.0" 轉成 "80001"
+                    valid_price_df['clean_id'] = valid_price_df['item_id'].astype(str).str.split('_').str[0].str.replace(r'\.0$', '', regex=True)
+                    
+                    # 建立最新價格字典 {"80001": 258, "80004": 238}
+                    latest_prices = valid_price_df.groupby('clean_id')['price'].last().to_dict()
+                    
+                    # 將價格映射回我們的主菜單 (找不到就維持原價)
                     final_df['price'] = final_df.apply(
-                        lambda row: latest_prices.get(row['item_id'], row.get('price', 0)), 
+                        lambda row: latest_prices.get(str(row['item_id']), row.get('price', 0)), 
                         axis=1
                     )
-    except:
+    except Exception as e:
+        print(f"定價學習失敗: {e}")
         pass
     
     final_df['img'] = final_df['item_id'].apply(lambda x: image_lookup.get(str(x), DEFAULT_IMAGE))
-    # 維持向下相容，避免舊程式報錯
+    # 維持向下相容
     final_df['wd_avg'] = 0 
     final_df['we_avg'] = 0 
     
