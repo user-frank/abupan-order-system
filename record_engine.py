@@ -64,10 +64,17 @@ def _get_cloud_dataframe(sheet):
                 
         if 'cart_key' in df.columns: df['cart_key'] = df['cart_key'].astype(str)
         if 'date' in df.columns: df['date'] = df['date'].astype(str)
+        
+        # 🌟 【系統免疫力升級 1】：自動清除因為連線不穩產生的「幽靈表頭」
+        if not df.empty and 'date' in df.columns:
+            df = df[df['date'] != 'date'].copy()
+            
+        # 🌟 【系統免疫力升級 2】：自動清除「連點按鈕」造成的重複商品，永遠只保留最後一次的紀錄！
+        if not df.empty and 'date' in df.columns and 'cart_key' in df.columns:
+            df = df.drop_duplicates(subset=['date', 'cart_key'], keep='last')
             
         return df
     except Exception as e:
-        # 🚨 【核心防護修復】：發生錯誤時，回傳 None 而不是空的表單！
         st.error(f"❌ 讀取雲端資料發生異常: {e}")
         return None
 
@@ -97,7 +104,6 @@ def load_daily_record(date_str):
     
     df = _get_cloud_dataframe(sheet)
     
-    # 防護：如果回傳 None，代表讀取失敗，回傳空表給前端顯示，但絕不覆寫
     if df is None or df.empty: 
         return pd.DataFrame()
     
@@ -113,7 +119,6 @@ def save_ordered_data(date_str, cart_items):
     
     df = _get_cloud_dataframe(sheet)
     
-    # 🛡️ 【絕對防護鎖】：如果讀取失敗，強制攔截存檔動作，保護歷史資料！
     if df is None:
         st.error("🚨 雲端資料庫連線不穩！為保護歷史資料安全，已自動攔截本次存檔。請稍後再試！")
         return
@@ -155,7 +160,7 @@ def update_record_qty(date_str, cart_key, field, new_qty):
     if not sheet: return
     df = _get_cloud_dataframe(sheet)
     
-    if df is None: return # 🛡️ 防護鎖
+    if df is None: return 
     
     mask = (df['date'] == str(date_str)) & (df['cart_key'] == str(cart_key))
     if mask.any():
@@ -168,7 +173,7 @@ def delete_order_item(date_str, cart_key):
     if not sheet: return
     df = _get_cloud_dataframe(sheet)
     
-    if df is None: return # 🛡️ 防護鎖
+    if df is None: return 
     
     mask = (df['date'] == str(date_str)) & (df['cart_key'] == str(cart_key))
     if mask.any():
@@ -180,7 +185,6 @@ def batch_update_record_qty(date_str, updates_dict, current_user="", current_tim
     if not sheet: return
     df = _get_cloud_dataframe(sheet)
     
-    # 🛡️ 絕對防護鎖
     if df is None:
         st.error("🚨 雲端資料庫連線不穩！為保護歷史資料安全，已自動攔截本次回報。請稍後再試！")
         return 
