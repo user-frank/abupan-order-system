@@ -77,12 +77,12 @@ def render_ai_assistant(dept_name, display_df):
     # 🌟 根據權限渲染不同的 UI 標題
     if dept_name == "總管理處":
         st.markdown(f"#### 👑 總管理處 - 首席 AI 營運戰略幕僚")
-        st.markdown(f"<p style='font-size:12px; color:#888;'>💡 擁有全公司最高讀取權限！支援跨部門營運分析、天氣預測與戰略建議。(本次登入剩餘額度: <span style='color:#f37021;font-weight:bold;'>{remaining_quota}</span> 次)</p>", unsafe_allow_html=True)
-        placeholder_text = "例：幫我查明天台中天氣，並比較各部門最近哪項商品報廢最嚴重？"
+        st.markdown(f"<p style='font-size:12px; color:#888;'>💡 擁有全公司最高讀取權限！支援跨部門營運分析與戰略建議。(本次登入剩餘額度: <span style='color:#f37021;font-weight:bold;'>{remaining_quota}</span> 次)</p>", unsafe_allow_html=True)
+        placeholder_text = "例：幫我比較各部門最近哪項商品報廢最嚴重？並給出調整建議。"
     else:
-        st.markdown(f"#### 🤖 {dept_name}部 - AI 首席資料分析師 (聯網+大數據版)")
-        st.markdown(f"<p style='font-size:12px; color:#888;'>💡 支援搜尋天氣預報，並自動調閱過去7天歷史報廢紀錄給予精準備料建議！(剩餘額度: <span style='color:#f37021;font-weight:bold;'>{remaining_quota}</span> 次)</p>", unsafe_allow_html=True)
-        placeholder_text = "例：幫我查明天台中天氣，建議鮭魚跟甜蝦該備多少量？"
+        st.markdown(f"#### 🤖 {dept_name}部 - AI 首席資料分析師 (大數據版)")
+        st.markdown(f"<p style='font-size:12px; color:#888;'>💡 自動調閱過去7天歷史報廢紀錄給予精準備料建議！(剩餘額度: <span style='color:#f37021;font-weight:bold;'>{remaining_quota}</span> 次)</p>", unsafe_allow_html=True)
+        placeholder_text = "例：根據過去7天歷史紀錄，建議我鮭魚跟甜蝦該備多少量？"
 
     with st.container(border=True):
         for msg in st.session_state.ai_chat_history:
@@ -104,12 +104,13 @@ def render_ai_assistant(dept_name, display_df):
             menu_info = ""
             for _, row in display_df.iterrows():
                 item_price = int(row.get('price', 0))
+                # 偷偷把均銷傳給 AI
                 wd_avg = row.get('wd_avg', 0) 
                 cat_prefix = f"[{row.get('cat', dept_name)}] " if dept_name == "總管理處" else ""
-                menu_info += f"- {cat_prefix}{row['name']} (單價: {item_price}元, 歷史平日均銷: {wd_avg}份)\n"
+                menu_info += f"- {cat_prefix}{row['name']} (單價: {item_price}元, 歷史長期平日均銷: {wd_avg}份)\n"
 
             with st.chat_message("assistant"):
-                with st.spinner("🤖 AI 正在調閱雲端歷史紀錄與查詢氣象中..."):
+                with st.spinner("🤖 AI 正在調閱雲端歷史紀錄與精算中..."):
                     try:
                         history_report = get_recent_7_days_history(dept_name)
                         
@@ -117,7 +118,7 @@ def render_ai_assistant(dept_name, display_df):
                         if dept_name == "總管理處":
                             system_instruction = f"""
                             你現在是阿布潘水產的【總管理處首席 AI 營運戰略幕僚】。
-                            今天是 {today_str}，地點在台灣台中市。
+                            今天是 {today_str}。
                             
                             【最高權限解鎖】：
                             1. 你擁有全公司所有部門的最高讀取權限，可以針對跨部門的業績、耗損、商品單價進行綜合分析與比較。
@@ -127,31 +128,33 @@ def render_ai_assistant(dept_name, display_df):
                         else:
                             system_instruction = f"""
                             你現在是阿布潘水產【{dept_name}部】的首席 AI 資料分析師。
-                            今天是 {today_str}，地點在台灣台中市。
+                            今天是 {today_str}。
                             
                             【安全隔離限制】：
                             1. 只能處理【{dept_name}部】的業務。嚴禁跨部門回答。
-                            2. 絕對禁止回答政治、寫程式等無關話題。
+                            2. 絕對禁止回答政治、寫程式等無關話題。遇到無關話題請嚴格拒絕。
                             """
 
                         system_instruction += f"""
-                        【今日全商品庫 (包含長期平均實力)】：
+                        【今日全商品庫 (包含單價與長期平均實力)】：
                         {menu_info}
                         
                         【⚠️ 雲端資料庫傳回的過去 7 天真實營運紀錄 (近期脈搏)】：
                         {history_report}
 
-                        【你的專業分析任務指南】：
-                        1. 詢問未來建議時，必須運用 Google 搜尋工具，查詢「台灣交通部中央氣象署 台中市 明日天氣預報」。
-                        2. 結合「長期平日均銷」與「過去 7 天真實耗損(做太多/做太少)」精算建議。
-                        3. 如果員工請你算出營業額，請將建議數量乘上單價加總。
-                        4. 回答要專業、有說服力（必須引述你看到的歷史耗損數據），並加上 Emoji 讓排版好讀。
+                        【你的專業分析任務指南 (極度重要)】：
+                        1. 【雙軌交叉比對】：你必須結合「長期平日均銷」與「過去 7 天真實耗損(做太多/做太少)」精算建議。
+                           - 基準線：以菜單資料庫中的「歷史長期平日均銷」為出發點。
+                           - 近期微調：如果過去 7 天紀錄顯示「⚠️做太多，累積報廢」，代表近期買氣衰退，請勇敢將建議數量砍低於歷史均銷。
+                           - 近期微調：如果過去 7 天紀錄顯示「🔥做太少，缺貨」，請建議增加備料。
+                        2. 如果員工請你算出營業額，請確實將你建議的數量乘上菜單裡的單價，加總並加上千分位逗號。
+                        3. 回答要專業、有說服力（必須引述你看到的歷史耗損數據，或是你算出的營業額），並加上 Emoji 讓排版好讀。
                         """
 
+                        # 🌟 修復 1.5-flash 的呼叫方式，拔除不支援的聯網工具
                         model = genai.GenerativeModel(
-                            model_name='gemini-1.5-flash',
-                            system_instruction=system_instruction,
-                            tools='google_search_retrieval' 
+                            model_name='gemini-1.5-flash-latest', # 使用 latest 確保抓到最新版
+                            system_instruction=system_instruction
                         )
                         
                         history = []
