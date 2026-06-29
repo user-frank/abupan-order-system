@@ -5,3 +5,4 @@ google-auth
 openpyxl
 xlrd
 streamlit-authenticator
+google-generativeai
