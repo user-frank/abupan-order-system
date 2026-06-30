@@ -1,7 +1,7 @@
 import streamlit as st
 import google.generativeai as genai
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import requests
 import urllib3
 
@@ -11,11 +11,12 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 # 🌟 氣象署授權碼
 CWA_API_KEY = "CWA-BCF9370E-EC0E-4B1A-B9B4-8DF41AEE71E6"
 
-# 🌟 導入雲端資料庫工具，讓 AI 有能力調閱歷史紀錄！
 from record_engine import get_worksheet, _get_cloud_dataframe
 
+# 🌟 台灣時區 (UTC+8)
+TW_TZ = timezone(timedelta(hours=8))
+
 def init_ai():
-    """初始化並檢查 API Key"""
     try:
         api_key = st.secrets["gemini_api_key"]
         genai.configure(api_key=api_key)
@@ -23,8 +24,7 @@ def init_ai():
     except Exception:
         return False
 
-# 🌟 【新增】：天氣查詢引擎 (帶有 1 小時快取，極速秒回)
-@st.cache_data(ttl=14400, show_spinner=False)
+@st.cache_data(ttl=3600, show_spinner=False)
 def get_tomorrow_weather(city_name="臺中市", district_name="北屯區"):
     url = f"https://opendata.cwa.gov.tw/api/v1/rest/datastore/F-D0047-073"
     params = {"Authorization": CWA_API_KEY, "locationName": district_name, "format": "JSON"}
@@ -33,15 +33,15 @@ def get_tomorrow_weather(city_name="臺中市", district_name="北屯區"):
         response = requests.get(url, params=params, timeout=5, verify=False)
         response.raise_for_status()
         
-        tomorrow_str = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
-        data = response.json()
+        tw_now = datetime.now(TW_TZ)
+        tomorrow_str = (tw_now + timedelta(days=1)).strftime("%Y-%m-%d")
         
+        data = response.json()
         records = data.get("records", data.get("Records", {}))
         locations_arr = records.get("locations", records.get("Locations", []))
         if not locations_arr: return ""
             
         loc_list = locations_arr[0].get("location", locations_arr[0].get("Location", []))
-        
         target_loc = loc_list[0] 
         for loc in loc_list:
             if loc.get("locationName", "") == district_name:
@@ -54,21 +54,22 @@ def get_tomorrow_weather(city_name="臺中市", district_name="北屯區"):
         if not desc_element: return ""
             
         time_list = desc_element.get("time", desc_element.get("Time", []))
+        day_weather = ""
+        night_weather = ""
         
-        day_weather = "查無資料"
-        night_weather = "查無資料"
-        
+        tomorrow_forecasts = []
         for t in time_list:
             start_time = t.get("startTime", t.get("StartTime", ""))
-            val_list = t.get("elementValue", t.get("ElementValue", []))
-            if not val_list: continue
-            
-            desc = val_list[0].get("value", val_list[0].get("WeatherDescription", ""))
-            
-            if start_time.startswith(f"{tomorrow_str}T12"):
-                day_weather = desc
-            elif start_time.startswith(f"{tomorrow_str}T18"):
-                night_weather = desc
+            if tomorrow_str in start_time:
+                val_list = t.get("elementValue", t.get("ElementValue", []))
+                if val_list:
+                    tomorrow_forecasts.append(val_list[0].get("value", val_list[0].get("WeatherDescription", "")))
+        
+        if len(tomorrow_forecasts) >= 1: day_weather = tomorrow_forecasts[0]
+        if len(tomorrow_forecasts) >= 2: night_weather = tomorrow_forecasts[1]
+        
+        if not day_weather: day_weather = "依氣象署網站為準"
+        if not night_weather: night_weather = "依氣象署網站為準"
                 
         return f"☀️［白天］{day_weather}\n🌙［晚上］{night_weather}"
 
@@ -76,7 +77,6 @@ def get_tomorrow_weather(city_name="臺中市", district_name="北屯區"):
         return ""
 
 def get_recent_7_days_history(dept_name):
-    """🧠 AI 的外掛大腦：自動調閱過去 10 天的真實銷售與耗損紀錄"""
     try:
         sheet = get_worksheet()
         if not sheet: return "無雲端資料庫連線。"
@@ -84,11 +84,9 @@ def get_recent_7_days_history(dept_name):
         df = _get_cloud_dataframe(sheet)
         if df is None or df.empty: return "資料庫目前尚無歷史紀錄。"
         
-        today = datetime.now()
-        # 老闆修改：抓取 10 天數據
-        past_7_days = [(today - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(1, 11)]
+        tw_now = datetime.now(TW_TZ)
+        past_7_days = [(tw_now - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(1, 11)]
         
-        # 🌟 【最高權限解鎖】：如果老闆呼叫，就不限制部門，全部調閱！
         if dept_name == "總管理處":
             history_df = df[df['date'].isin(past_7_days)].copy()
         else:
@@ -100,7 +98,6 @@ def get_recent_7_days_history(dept_name):
         history_df['pos_qty'] = pd.to_numeric(history_df['pos_qty'], errors='coerce').fillna(0)
         history_df['waste_qty'] = history_df['ordered_qty'] - history_df['pos_qty']
         
-        # 進行大數據特徵壓縮
         analysis_df = history_df.groupby(['cat', 'name'] if 'cat' in history_df.columns else 'name').agg(
             總銷售量=('pos_qty', 'sum'),
             最高單日銷售=('pos_qty', 'max'),
@@ -123,9 +120,44 @@ def get_recent_7_days_history(dept_name):
     except Exception as e:
         return f"調閱歷史資料失敗：{e}"
 
+# 🌟【全新雷達】：讓 AI 知道員工今天/明天建檔了什麼預估數量！
+def get_current_plans(dept_name):
+    try:
+        sheet = get_worksheet()
+        if not sheet: return ""
+        df = _get_cloud_dataframe(sheet)
+        if df is None or df.empty: return ""
+        
+        tw_now = datetime.now(TW_TZ)
+        today_str = tw_now.strftime("%Y-%m-%d")
+        tomorrow_str = (tw_now + timedelta(days=1)).strftime("%Y-%m-%d")
+        
+        if dept_name == "總管理處":
+            target_df = df[df['date'].isin([today_str, tomorrow_str])].copy()
+        else:
+            target_df = df[(df['cat'] == dept_name) & (df['date'].isin([today_str, tomorrow_str]))].copy()
+            
+        target_df['ordered_qty'] = pd.to_numeric(target_df['ordered_qty'], errors='coerce').fillna(0)
+        target_df = target_df[target_df['ordered_qty'] > 0]
+        
+        if target_df.empty: return "目前資料庫中尚未填寫今日或明日的預估出餐數量。"
+        
+        report = "【目前資料庫中已建檔的出餐計畫】：\n"
+        for d_str in [today_str, tomorrow_str]:
+            day_df = target_df[target_df['date'] == d_str]
+            if not day_df.empty:
+                day_label = "今日" if d_str == today_str else "明日"
+                report += f"\n📅 {day_label} ({d_str}) 的預估出餐表：\n"
+                for _, r in day_df.iterrows():
+                    cat_prefix = f"[{r['cat']}] " if dept_name == "總管理處" else ""
+                    report += f"- {cat_prefix}{r['name']}: 預計製作 {int(r['ordered_qty'])} 份\n"
+        return report
+    except Exception:
+        return ""
+
 def render_ai_assistant(dept_name, display_df):
     if not init_ai():
-        st.info("🤖 AI 數據顧問正在休假中 。")
+        st.info("🤖 AI 數據顧問正在休假中 (尚未設定有效金鑰)。")
         return
 
     st.divider()
@@ -135,11 +167,10 @@ def render_ai_assistant(dept_name, display_df):
 
     remaining_quota = 5 - st.session_state.ai_query_count
     
-    # 🌟 根據權限渲染不同的 UI 標題
     if dept_name == "總管理處":
         st.markdown(f"#### 👑 阿布潘老闆-專屬AI助手")
         st.markdown(f"<p style='font-size:12px; color:#888;'>💡 擁有全公司最高讀取權限！支援跨部門營運分析與戰略建議。(本次登入剩餘額度: <span style='color:#f37021;font-weight:bold;'>{remaining_quota}</span> 次)</p>", unsafe_allow_html=True)
-        placeholder_text = "例：最近適合做活動嗎？並給出調整建議。"
+        placeholder_text = "例：你看我明天壽司部的出餐表安排合適嗎？幫我算營業額！"
     else:
         st.markdown(f"#### 🤖 {dept_name}部 - AI 首席資料分析師 ")
         st.markdown(f"<p style='font-size:12px; color:#888;'>💡 自動調閱歷史報廢紀錄給予精準備料建議！(剩餘額度: <span style='color:#f37021;font-weight:bold;'>{remaining_quota}</span> 次)</p>", unsafe_allow_html=True)
@@ -163,7 +194,7 @@ def render_ai_assistant(dept_name, display_df):
             with st.chat_message("user"):
                 st.markdown(prompt)
 
-            today_str = datetime.now().strftime("%Y-%m-%d")
+            tw_now_str = datetime.now(TW_TZ).strftime("%Y-%m-%d")
             menu_info = ""
             for _, row in display_df.iterrows():
                 item_price = int(row.get('price', 0))
@@ -174,9 +205,8 @@ def render_ai_assistant(dept_name, display_df):
             with st.chat_message("assistant"):
                 with st.spinner("🤖 思考回覆中 ..."):
                     try:
-                        # 🌟 意圖辨識：只有問到天氣或備料建議，才去抓氣象署資料！
                         weather_info = ""
-                        weather_keywords = ["天氣", "下雨", "氣象", "雨", "晴", "颱風", "預估", "備料", "建議", "安排"]
+                        weather_keywords = ["天氣", "下雨", "氣象", "雨", "晴", "颱風", "預估", "備料", "建議", "安排", "明天"]
                         if any(kw in prompt for kw in weather_keywords):
                             weather_data = get_tomorrow_weather()
                             if weather_data:
@@ -184,11 +214,13 @@ def render_ai_assistant(dept_name, display_df):
 
                         history_report = get_recent_7_days_history(dept_name)
                         
-                        # 🌟 根據權限進行不同的 AI 靈魂洗腦
+                        # 🌟 啟動新外掛：抓取員工已經建好的計畫表！
+                        current_plan_report = get_current_plans(dept_name)
+                        
                         if dept_name == "總管理處":
                             system_instruction = f"""
                             你現在是阿布潘水產的【總管理處首席 AI 營運戰略幕僚】。
-                            今天是 {today_str}。
+                            今天是 {tw_now_str}。
                             
                             【最高權限解鎖】：
                             1. 你擁有全公司所有部門的最高讀取權限，可以針對跨部門的業績、耗損、商品單價進行綜合分析與比較。
@@ -198,7 +230,7 @@ def render_ai_assistant(dept_name, display_df):
                         else:
                             system_instruction = f"""
                             你現在是阿布潘水產【{dept_name}部】的首席 AI 資料分析師。
-                            今天是 {today_str}。
+                            今天是 {tw_now_str}。
                             
                             【安全隔離限制】：
                             1. 只能處理【{dept_name}部】的業務。嚴禁跨部門回答。
@@ -213,22 +245,22 @@ def render_ai_assistant(dept_name, display_df):
                         {history_report}
 
                         【你的專業分析任務指南 (極度重要)】：
-                        1. 【雙軌交叉比對】：你必須結合「長期平日均銷」與「過去 10 天真實耗損(做太多/做太少)」精算建議。
-                           - 基準線：以菜單資料庫中的「歷史長期平日均銷」為出發點。
-                           - 近期微調：如果過去 10 天紀錄顯示「⚠️做太多，累積報廢」，代表近期買氣衰退，請勇敢將建議數量砍低於歷史均銷。
-                           - 近期微調：如果過去 10 天紀錄顯示「🔥做太少，缺貨」，請建議增加備料。
-                        2. 如果使用者有提供天氣資訊，請務必將「天氣預報」納入備料考量（例如：下雨調降數量，好天氣調升數量）。
-                        3. 如果員工請你算出營業額，請確實將你建議的數量乘上菜單裡的單價，加總並加上千分位逗號。
-                        4. 回答要專業、有說服力（必須引述你看到的歷史耗損數據，或是你算出的營業額），並加上 Emoji 讓排版好讀。
+                        1. 如果老闆問「明天的出餐表合適嗎」，請直接從隱藏資料中讀取【已建檔的出餐計畫】，拿它去跟【過去 10 天真實營運紀錄】做比較，告訴老闆哪幾項備太多或備太少。
+                        2. 【雙軌交叉比對】：你必須結合「長期平日均銷」與「過去 10 天真實耗損」精算建議。
+                           - 如果過去 10 天紀錄顯示「⚠️做太多，浪費」，請勇敢建議數量砍低。
+                           - 如果過去 10 天紀錄顯示「🔥做太少，缺貨」，請建議增加備料。
+                        3. 如果有提供【天氣預報】，請務必納入考量（如下雨調降，好天氣調升）。
+                        4. 如果被要求算營業額，請用提供的單價乘上數量加總。
+                        5. 回答要專業、有說服力，並加上 Emoji 讓排版好讀。
                         """
 
-                        # 🌟 你要求的 2.5 模型
                         model = genai.GenerativeModel(
                             model_name='gemini-2.5-flash', 
                             system_instruction=system_instruction
                         )
                         
-                        hidden_context = f"【隱藏系統資料】\n{weather_info}\n【使用者提問】\n"
+                        # 🌟 把所有情報打包進去
+                        hidden_context = f"【隱藏系統資料】\n{weather_info}\n{current_plan_report}\n【使用者提問】\n"
                         full_prompt = hidden_context + prompt
 
                         history = []
@@ -247,4 +279,8 @@ def render_ai_assistant(dept_name, display_df):
                         st.rerun()
                         
                     except Exception as e:
-                        st.error(f"❌ AI 發生異常: {e}。請確認您的 Streamlit Secrets 金鑰是否正確！")
+                        error_msg = str(e)
+                        if "429" in error_msg or "Quota exceeded" in error_msg:
+                            st.warning("⏳ 喔喔！您問得太快了！ 的免費額度限制為「每分鐘 5 次」。請稍等 1 分鐘後再試一次喔！")
+                        else:
+                            st.error(f"❌ AI 發生異常: {e}")
