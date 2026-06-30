@@ -78,7 +78,7 @@ def render_ai_assistant(dept_name, display_df):
     if dept_name == "總管理處":
         st.markdown(f"#### 👑 阿布潘老闆-專屬AI助手")
         st.markdown(f"<p style='font-size:12px; color:#888;'>💡 擁有全公司最高讀取權限！支援跨部門營運分析與戰略建議。(本次登入剩餘額度: <span style='color:#f37021;font-weight:bold;'>{remaining_quota}</span> 次)</p>", unsafe_allow_html=True)
-        placeholder_text = "例：幫我比較各部門最近哪項商品報廢最嚴重？並給出調整建議。"
+        placeholder_text = "例：最近適合做活動嗎？並給出調整建議。"
     else:
         st.markdown(f"#### 🤖 {dept_name}部 - AI 首席資料分析師 ")
         st.markdown(f"<p style='font-size:12px; color:#888;'>💡 自動調閱過去7天歷史報廢紀錄給予精準備料建議！(剩餘額度: <span style='color:#f37021;font-weight:bold;'>{remaining_quota}</span> 次)</p>", unsafe_allow_html=True)
@@ -121,7 +121,7 @@ def render_ai_assistant(dept_name, display_df):
                             
                             【最高權限解鎖】：
                             1. 你擁有全公司所有部門的最高讀取權限，可以針對跨部門的業績、耗損、商品單價進行綜合分析與比較。
-                            2. 你的回答層次必須具備「老闆視角」，以提升營收、降低報廢、優化跨部門資源為主。
+                            2. 你的回答層次必須具備「老闆視角」，以提升營收、商品搭配活動建議、優化跨部門資源為主。
                             3. 絕對禁止回答政治、寫程式等與阿布潘水產無關的話題。
                             """
                         else:
