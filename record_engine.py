@@ -3,20 +3,14 @@ import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
 import os
-import time  # 🌟 新增時間模組，用來控制重試的冷卻時間
+import time
 
-# ==========================================
-# ☁️ 雲端資料庫設定
-# ==========================================
 SHEET_NAME = "阿布潘出餐系統_雲端資料庫"
 WORKSHEET_NAME = "daily_records"
 
 @st.cache_resource
 def get_gspread_client():
-    scopes = [
-        "https://www.googleapis.com/auth/spreadsheets",
-        "https://www.googleapis.com/auth/drive"
-    ]
+    scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
     try:
         if os.path.exists("google-credentials.json"):
             creds = Credentials.from_service_account_file("google-credentials.json", scopes=scopes)
@@ -25,7 +19,7 @@ def get_gspread_client():
                 if "gcp_service_account" in st.secrets:
                     creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scopes)
                 else:
-                    st.error("❌ 找不到雲端保險箱 (gcp_service_account) 設定！")
+                    st.error("❌ 找不到雲端保險箱設定！")
                     return None
             except Exception:
                 st.error("❌ 找不到任何有效的憑證來源！")
@@ -41,7 +35,7 @@ def get_worksheet():
         try:
             return client.open(SHEET_NAME).worksheet(WORKSHEET_NAME)
         except Exception as e:
-            st.error(f"❌ 找不到指定的試算表或工作表: {e}")
+            st.error(f"❌ 找不到指定的試算表: {e}")
             return None
 
 def _get_cloud_dataframe(sheet):
@@ -85,8 +79,7 @@ def _sync_to_cloud(sheet, df):
     body = df_safe.astype(str).values.tolist()
     data_to_upload = [headers] + body
     
-    # 🛡️ 【終極防護：指數退避重試機制】
-    # 避免遇到 API 429 限制時，clear() 執行了但 update() 失敗導致資料庫被清空
+    # 🌟 指數退避重試，防當機
     max_retries = 5
     for attempt in range(max_retries):
         try:
@@ -95,14 +88,12 @@ def _sync_to_cloud(sheet, df):
                 sheet.update(data_to_upload)
             except Exception:
                 sheet.update('A1', data_to_upload)
-            return # 🌟 成功寫入，安全下莊！
+            return 
         except Exception as e:
             if attempt < max_retries - 1:
-                # 遇到錯誤，讓系統冷卻一下 (1秒, 2秒, 4秒...) 再試
                 time.sleep(2 ** attempt) 
             else:
-                print(f"\n❌ [系統警告] 雲端同步失敗，原因：{e}\n")
-                st.error(f"❌ 雲端同步失敗，請稍後重新點擊存檔：{e}")
+                st.error(f"❌ 雲端同步失敗，請稍後重試：{e}")
 
 # ==========================================
 # 系統核心存取功能
@@ -112,10 +103,7 @@ def load_daily_record(date_str):
     if not sheet: return pd.DataFrame()
     
     df = _get_cloud_dataframe(sheet)
-    
-    # 防護：如果回傳 None，代表讀取失敗，回傳空表給前端顯示，但絕不覆寫
-    if df is None or df.empty: 
-        return pd.DataFrame()
+    if df is None or df.empty: return pd.DataFrame()
     
     df_filtered = df[df['date'] == str(date_str)].copy()
     if 'cart_key' not in df_filtered.columns and 'item_id' in df_filtered.columns:
@@ -128,10 +116,8 @@ def save_ordered_data(date_str, cart_items):
     if not sheet: return
     
     df = _get_cloud_dataframe(sheet)
-    
-    # 🛡️ 【絕對防護鎖】：如果讀取失敗，強制攔截存檔動作，保護歷史資料！
     if df is None:
-        st.error("🚨 雲端資料庫連線不穩！為保護歷史資料安全，已自動攔截本次存檔。請稍後再試！")
+        st.error("🚨 資料庫連線不穩，已攔截本次存檔。")
         return
     
     for cart_key, item in cart_items.items():
@@ -142,6 +128,10 @@ def save_ordered_data(date_str, cart_items):
             df.at[idx, 'plan_operator'] = str(item.get('operator', '未記錄'))
             df.at[idx, 'plan_time'] = str(item.get('update_time', '未記錄'))
             df.at[idx, 'price'] = int(item.get('price', 0))
+            # 🌟 補登時順便更新實際數量
+            if 'actual_qty' in item: df.at[idx, 'actual_qty'] = int(item['actual_qty'])
+            if 'report_operator' in item: df.at[idx, 'report_operator'] = str(item['report_operator'])
+            if 'report_time' in item: df.at[idx, 'report_time'] = str(item['report_time'])
         else:
             new_row = {
                 'date': str(date_str),
@@ -150,19 +140,17 @@ def save_ordered_data(date_str, cart_items):
                 'name': str(item['name']),
                 'cat': str(item['cat']),
                 'ordered_qty': int(item['qty']),
-                'actual_qty': 0,
+                'actual_qty': int(item.get('actual_qty', 0)), # 🌟 直接塞入實際數量
                 'pos_qty': 0,
                 'pos_revenue': 0, 
                 'price': int(item.get('price', 0)), 
                 'plan_operator': str(item.get('operator', '未記錄')),
                 'plan_time': str(item.get('update_time', '未記錄')),
-                'report_operator': "未記錄",
-                'report_time': "未記錄"
+                'report_operator': str(item.get('report_operator', '未記錄')),
+                'report_time': str(item.get('report_time', '未記錄'))
             }
-            if df.empty:
-                df = pd.DataFrame([new_row])
-            else:
-                df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+            if df.empty: df = pd.DataFrame([new_row])
+            else: df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
                 
     _sync_to_cloud(sheet, df)
 
@@ -170,9 +158,7 @@ def update_record_qty(date_str, cart_key, field, new_qty):
     sheet = get_worksheet()
     if not sheet: return
     df = _get_cloud_dataframe(sheet)
-    
-    if df is None: return # 🛡️ 防護鎖
-    
+    if df is None: return 
     mask = (df['date'] == str(date_str)) & (df['cart_key'] == str(cart_key))
     if mask.any():
         idx = df[mask].index[0]
@@ -183,9 +169,7 @@ def delete_order_item(date_str, cart_key):
     sheet = get_worksheet()
     if not sheet: return
     df = _get_cloud_dataframe(sheet)
-    
-    if df is None: return # 🛡️ 防護鎖
-    
+    if df is None: return 
     mask = (df['date'] == str(date_str)) & (df['cart_key'] == str(cart_key))
     if mask.any():
         df = df[~mask]
@@ -196,9 +180,8 @@ def batch_update_record_qty(date_str, updates_dict, current_user="", current_tim
     if not sheet: return
     df = _get_cloud_dataframe(sheet)
     
-    # 🛡️ 絕對防護鎖
     if df is None:
-        st.error("🚨 雲端資料庫連線不穩！為保護歷史資料安全，已自動攔截本次回報。請稍後再試！")
+        st.error("🚨 連線不穩已攔截回報。")
         return 
         
     updated = False
@@ -211,5 +194,4 @@ def batch_update_record_qty(date_str, updates_dict, current_user="", current_tim
             if current_time: df.at[idx, 'report_time'] = str(current_time)
             updated = True
             
-    if updated:
-        _sync_to_cloud(sheet, df)
+    if updated: _sync_to_cloud(sheet, df)
