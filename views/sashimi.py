@@ -69,6 +69,26 @@ def show():
     sashimi_df = sashimi_df.drop_duplicates(subset=['item_id'], keep='last')
     sashimi_df = sashimi_df.sort_values(by='item_id') 
 
+    # 🌟 【新外掛：全面價格學習引擎】讓自訂商品也能自動抓取最新價格！
+    try:
+        from record_engine import get_worksheet, _get_cloud_dataframe
+        sheet = get_worksheet()
+        if sheet:
+            cloud_df = _get_cloud_dataframe(sheet)
+            if not cloud_df.empty and 'price' in cloud_df.columns:
+                valid_price_df = cloud_df[pd.to_numeric(cloud_df['price'], errors='coerce') > 0].copy()
+                valid_price_df['clean_id'] = valid_price_df['item_id'].astype(str).str.split('_').str[0].str.replace(r'\.0$', '', regex=True)
+                valid_price_df = valid_price_df.sort_values(by='date', ascending=True)
+                latest_prices = valid_price_df.groupby('clean_id')['price'].last().to_dict()
+                
+                # 強制將最新價格套用到所有商品 (包含自訂商品)
+                sushi_df['price'] = sushi_df.apply(
+                    lambda row: latest_prices.get(str(row['item_id']), row.get('price', 0)), 
+                    axis=1
+                )
+    except:
+        pass
+        
     subcat_dict = load_subcategories(DEPT_NAME)
     sashimi_df['subcat'] = sashimi_df['item_id'].map(lambda x: subcat_dict.get(x, "生魚片區"))
 
