@@ -235,7 +235,7 @@ def render_ai_assistant(dept_name, display_df):
                 with st.chat_message(msg["role"]): st.markdown(msg["content"])
 
         if st.session_state.ai_query_count >= 5:
-            st.warning("✋ 您本次的 AI 詢問額度已達上限。若需繼續提問，請充值 (F5 重新整理)！")
+            st.warning("✋ 您本次的 AI 詢問額度已達上限。若需繼續提問，請充值 ！")
             return
 
         prompt = st.chat_input(placeholder_text)
