@@ -1,9 +1,12 @@
 import streamlit as st
-import google.generativeai as genai
 import pandas as pd
 from datetime import datetime, timedelta, timezone
 import requests
 import urllib3
+
+# 🌟 導入 Google 最新的官方 AI 套件
+from google import genai
+from google.genai import types
 
 # 關閉 SSL 憑證警告
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -17,10 +20,11 @@ from config_engine import load_subcategories
 # 🌟 台灣時區 (UTC+8)
 TW_TZ = timezone(timedelta(hours=8))
 
-def init_ai():
+def check_ai_key():
+    """檢查 API Key 是否存在"""
     try:
         api_key = st.secrets["gemini_api_key"]
-        genai.configure(api_key=api_key)
+        if not api_key: return False
         return True
     except Exception:
         return False
@@ -202,7 +206,7 @@ def get_current_plans(dept_name):
         return ""
 
 def render_ai_assistant(dept_name, display_df):
-    if not init_ai():
+    if not check_ai_key():
         st.info("🤖 AI 數據顧問正在休假中 (尚未設定有效金鑰)。")
         return
 
@@ -231,7 +235,7 @@ def render_ai_assistant(dept_name, display_df):
                 with st.chat_message(msg["role"]): st.markdown(msg["content"])
 
         if st.session_state.ai_query_count >= 5:
-            st.warning("✋ 您本次的 AI 詢問額度已達上限。若需繼續提問，請充值！")
+            st.warning("✋ 您本次的 AI 詢問額度已達上限。若需繼續提問，請充值 (F5 重新整理)！")
             return
 
         prompt = st.chat_input(placeholder_text)
@@ -301,20 +305,24 @@ def render_ai_assistant(dept_name, display_df):
                         7. 嚴禁虛構數據！如果 30 天內查無該商品紀錄，請直言「無歷史數據可供分析」。
                         """
 
-                        try:
-                            model = genai.GenerativeModel(model_name='gemini-2.5-flash', system_instruction=system_instruction)
-                        except Exception:
-                            model = genai.GenerativeModel(model_name='gemini-1.5-flash', system_instruction=system_instruction)
+                        # 🌟 使用 Google 最新官方寫法呼叫 AI！
+                        client = genai.Client(api_key=st.secrets["gemini_api_key"])
+                        config = types.GenerateContentConfig(
+                            system_instruction=system_instruction
+                        )
                         
                         hidden_context = f"【隱藏系統資料】\n{weather_info}\n{current_plan_report}\n【使用者提問】\n"
                         full_prompt = hidden_context + prompt
 
-                        history = []
+                        # 轉換歷史訊息格式為新版要求
+                        formatted_history = []
                         for m in st.session_state.ai_chat_history:
                             role = "user" if m["role"] == "user" else "model"
-                            history.append({"role": role, "parts": [m["content"]]})
+                            formatted_history.append(
+                                types.Content(role=role, parts=[types.Part.from_text(text=m["content"])])
+                            )
                             
-                        chat = model.start_chat(history=history)
+                        chat = client.chats.create(model='gemini-2.5-flash', config=config, history=formatted_history)
                         response = chat.send_message(full_prompt)
                         
                         st.markdown(response.text)
