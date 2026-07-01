@@ -12,6 +12,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 CWA_API_KEY = "CWA-BCF9370E-EC0E-4B1A-B9B4-8DF41AEE71E6"
 
 from record_engine import get_worksheet, _get_cloud_dataframe
+from config_engine import load_subcategories
 
 # 🌟 台灣時區 (UTC+8)
 TW_TZ = timezone(timedelta(hours=8))
@@ -76,7 +77,8 @@ def get_tomorrow_weather(city_name="臺中市", district_name="北屯區"):
     except Exception:
         return ""
 
-def get_recent_7_days_history(dept_name):
+def get_recent_history_report(dept_name):
+    """🧠 終極 AI 大腦：提供過去 30 天逐日明細、打折偵測、與【每日總產能報表】"""
     try:
         sheet = get_worksheet()
         if not sheet: return "無雲端資料庫連線。"
@@ -85,42 +87,86 @@ def get_recent_7_days_history(dept_name):
         if df is None or df.empty: return "資料庫目前尚無歷史紀錄。"
         
         tw_now = datetime.now(TW_TZ)
-        past_7_days = [(tw_now - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(1, 11)]
+        past_days = [(tw_now - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(1, 31)]
         
         if dept_name == "總管理處":
-            history_df = df[df['date'].isin(past_7_days)].copy()
+            history_df = df[df['date'].isin(past_days)].copy()
         else:
-            history_df = df[(df['cat'] == dept_name) & (df['date'].isin(past_7_days))].copy()
+            history_df = df[(df['cat'] == dept_name) & (df['date'].isin(past_days))].copy()
         
-        if history_df.empty: return "過去近期尚無營業紀錄可供分析。"
+        if history_df.empty: return "過去 30 天內尚無營業紀錄可供分析。"
         
-        history_df['ordered_qty'] = pd.to_numeric(history_df['ordered_qty'], errors='coerce').fillna(0)
-        history_df['pos_qty'] = pd.to_numeric(history_df['pos_qty'], errors='coerce').fillna(0)
-        history_df['waste_qty'] = history_df['ordered_qty'] - history_df['pos_qty']
+        for col in ['ordered_qty', 'actual_qty', 'pos_qty', 'pos_revenue', 'price']:
+            if col not in history_df.columns: history_df[col] = 0
+            history_df[col] = pd.to_numeric(history_df[col], errors='coerce').fillna(0).astype(int)
         
-        analysis_df = history_df.groupby(['cat', 'name'] if 'cat' in history_df.columns else 'name').agg(
-            總銷售量=('pos_qty', 'sum'),
-            最高單日銷售=('pos_qty', 'max'),
-            平均每日銷售=('pos_qty', 'mean'),
-            總報廢或短少=('waste_qty', 'sum')
-        ).reset_index()
+        history_df = history_df.sort_values(by='date', ascending=False)
         
-        report_text = "【過去 10 天真實營運數據分析】：\n"
-        for _, row in analysis_df.iterrows():
-            waste_status = ""
-            waste_val = row['總報廢或短少']
-            if waste_val > 0: waste_status = f"⚠️做太多，累積報廢 {int(waste_val)} 份"
-            elif waste_val < 0: waste_status = f"🔥做太少，缺貨 {int(abs(waste_val))} 份"
-            else: waste_status = "✅抓得剛剛好"
-                
-            cat_prefix = f"[{row['cat']}] " if 'cat' in row else ""
-            report_text += f"🔹 {cat_prefix}{row['name']}: 近期均銷 {row['平均每日銷售']:.1f} 份 (最高曾賣 {int(row['最高單日銷售'])} 份)。耗損狀況：{waste_status}。\n"
+        subcat_dict = load_subcategories(dept_name) if dept_name != "總管理處" else {}
+        if dept_name != "總管理處":
+            history_df['subcat'] = history_df['item_id'].astype(str).map(lambda x: subcat_dict.get(x.split('_')[0], "未分類"))
+        
+        weekdays_tw = ["一", "二", "三", "四", "五", "六", "日"]
+        report_text = "【過去 30 天各單品真實營運數據 (供趨勢與星期分析)】：\n"
+        
+        grouped = history_df.groupby(['cat', 'name'] if 'cat' in history_df.columns else 'name')
+        for group_keys, item_df in grouped:
+            item_name = group_keys[1] if isinstance(group_keys, tuple) else group_keys
+            cat_prefix = f"[{group_keys[0]}] " if isinstance(group_keys, tuple) and dept_name == "總管理處" else ""
             
+            report_text += f"\n🔹 {cat_prefix}{item_name}:\n"
+            for _, row in item_df.iterrows():
+                d_str = row['date']
+                d_obj = datetime.strptime(d_str, "%Y-%m-%d")
+                wd_str = weekdays_tw[d_obj.weekday()]
+                
+                o_qty = row['ordered_qty']
+                a_qty = row['actual_qty']
+                p_qty = row['pos_qty']
+                p_rev = row['pos_revenue']
+                price = row['price']
+                
+                status = ""
+                if o_qty > 0 and a_qty == 0:
+                    status = "(⏸️ 臨時取消出餐)"
+                elif a_qty > o_qty and p_qty >= o_qty:
+                    status = "(🔥 現場緊急追加)"
+                elif a_qty > p_qty:
+                    status = f"(⚠️ 報廢 {a_qty - p_qty} 份)"
+                elif a_qty < p_qty:
+                    status = f"(🚨 缺貨/超賣 {p_qty - a_qty} 份)"
+                else:
+                    status = "(✅ 完銷相符)"
+                    
+                discount_status = ""
+                if p_qty > 0 and price > 0:
+                    full_price_revenue = p_qty * price
+                    if p_rev < full_price_revenue * 0.95:
+                        discount_rate = int((p_rev / full_price_revenue) * 10)
+                        discount_status = f" [📉打折出清,平均約{discount_rate}折]"
+                    
+                report_text += f"   - {d_str}(週{wd_str}): 預估 {o_qty}, 實際 {a_qty}, POS賣出 {p_qty} {status}{discount_status}\n"
+        
+        report_text += "\n【過去 30 天各區總產能與總銷量參考 (用以控制建議總數)】：\n"
+        daily_summary = history_df.groupby('date').agg(總實際出餐=('actual_qty', 'sum'), 總POS銷售=('pos_qty', 'sum')).reset_index()
+        for _, row in daily_summary.iterrows():
+            d_str = row['date']
+            d_obj = datetime.strptime(d_str, "%Y-%m-%d")
+            wd_str = weekdays_tw[d_obj.weekday()]
+            
+            day_sub_df = history_df[history_df['date'] == d_str]
+            if dept_name == "總管理處":
+                sub_group = day_sub_df.groupby('cat')['actual_qty'].sum().to_dict()
+            else:
+                sub_group = day_sub_df.groupby('subcat')['actual_qty'].sum().to_dict()
+                
+            sub_details = ", ".join([f"{k}:{v}份" for k, v in sub_group.items() if v > 0])
+            report_text += f"📅 {d_str}(週{wd_str}) 總出餐: {row['總實際出餐']} 份 (明細: {sub_details}) | 總POS銷售: {row['總POS銷售']} 份\n"
+
         return report_text
     except Exception as e:
         return f"調閱歷史資料失敗：{e}"
 
-# 🌟【全新雷達】：讓 AI 知道員工今天/明天建檔了什麼預估數量！
 def get_current_plans(dept_name):
     try:
         sheet = get_worksheet()
@@ -170,11 +216,11 @@ def render_ai_assistant(dept_name, display_df):
     if dept_name == "總管理處":
         st.markdown(f"#### 👑 阿布潘老闆-專屬AI助手")
         st.markdown(f"<p style='font-size:12px; color:#888;'>💡 擁有全公司最高讀取權限！支援跨部門營運分析與戰略建議。(本次登入剩餘額度: <span style='color:#f37021;font-weight:bold;'>{remaining_quota}</span> 次)</p>", unsafe_allow_html=True)
-        placeholder_text = "例：你看我明天壽司部的出餐表安排合適嗎？幫我算營業額！"
+        placeholder_text = "例：最近適合做活動嗎？並給出調整建議。"
     else:
         st.markdown(f"#### 🤖 {dept_name}部 - AI 首席資料分析師 ")
-        st.markdown(f"<p style='font-size:12px; color:#888;'>💡 自動調閱歷史報廢紀錄給予精準備料建議！(剩餘額度: <span style='color:#f37021;font-weight:bold;'>{remaining_quota}</span> 次)</p>", unsafe_allow_html=True)
-        placeholder_text = "例：根據過去歷史紀錄，建議我鮭魚跟甜蝦該備多少量？"
+        st.markdown(f"<p style='font-size:12px; color:#888;'>💡 自動調閱過去 30 天歷史紀錄，給予最精準的備料建議！(剩餘額度: <span style='color:#f37021;font-weight:bold;'>{remaining_quota}</span> 次)</p>", unsafe_allow_html=True)
+        placeholder_text = "例：幫我預估明天的出餐量？"
 
     with st.container(border=True):
         for msg in st.session_state.ai_chat_history:
@@ -195,12 +241,13 @@ def render_ai_assistant(dept_name, display_df):
                 st.markdown(prompt)
 
             tw_now_str = datetime.now(TW_TZ).strftime("%Y-%m-%d")
+            tomorrow_wd = ["週一", "週二", "週三", "週四", "週五", "週六", "週日"][(datetime.now(TW_TZ) + timedelta(days=1)).weekday()]
+            
             menu_info = ""
             for _, row in display_df.iterrows():
                 item_price = int(row.get('price', 0))
-                wd_avg = row.get('wd_avg', 0) 
                 cat_prefix = f"[{row.get('cat', dept_name)}] " if dept_name == "總管理處" else ""
-                menu_info += f"- {cat_prefix}{row['name']} (單價: {item_price}元, 歷史長期平日均銷: {wd_avg}份)\n"
+                menu_info += f"- {cat_prefix}{row['name']} (單價: {item_price}元)\n"
 
             with st.chat_message("assistant"):
                 with st.spinner("🤖 思考回覆中 ..."):
@@ -212,54 +259,53 @@ def render_ai_assistant(dept_name, display_df):
                             if weather_data:
                                 weather_info = f"\n【☁️ 氣象署 明日台中北屯區預報】\n{weather_data}\n"
 
-                        history_report = get_recent_7_days_history(dept_name)
-                        
-                        # 🌟 啟動新外掛：抓取員工已經建好的計畫表！
+                        history_report = get_recent_history_report(dept_name)
                         current_plan_report = get_current_plans(dept_name)
                         
                         if dept_name == "總管理處":
                             system_instruction = f"""
                             你現在是阿布潘水產的【總管理處首席 AI 營運戰略幕僚】。
-                            今天是 {tw_now_str}。
+                            今天是 {tw_now_str}，明天是 {tomorrow_wd}。
                             
                             【最高權限解鎖】：
-                            1. 你擁有全公司所有部門的最高讀取權限，可以針對跨部門的業績、耗損、商品單價進行綜合分析與比較。
-                            2. 你的回答層次必須具備「老闆視角」，以提升營收、商品搭配活動建議、優化跨部門資源為主。
-                            3. 絕對禁止回答政治、寫程式等與阿布潘水產無關的話題。
+                            1. 擁有跨部門最高分析權限。回答須具備「老闆視角」，以提升毛利、降低報廢為主。
+                            2. 絕對禁止回答政治、寫程式等與阿布潘水產無關的話題。
                             """
                         else:
                             system_instruction = f"""
                             你現在是阿布潘水產【{dept_name}部】的首席 AI 資料分析師。
-                            今天是 {tw_now_str}。
+                            今天是 {tw_now_str}，明天是 {tomorrow_wd}。
                             
                             【安全隔離限制】：
-                            1. 只能處理【{dept_name}部】的業務。嚴禁跨部門回答。
-                            2. 絕對禁止回答政治、寫程式等無關話題。遇到無關話題請嚴格拒絕。
+                            1. 只能處理【{dept_name}部】業務。嚴禁跨部門回答。
+                            2. 絕對禁止回答無關話題。
                             """
 
                         system_instruction += f"""
-                        【今日全商品庫 (包含單價與長期平均實力)】：
+                        【今日全商品庫 (僅提供商品與最新單價)】：
                         {menu_info}
                         
-                        【⚠️ 雲端資料庫傳回的過去 10 天真實營運紀錄 (近期脈搏)】：
+                        【⚠️ 過去 30 天每日真實營運數據 (你的唯一決策依據！)】：
                         {history_report}
 
-                        【你的專業分析任務指南 (極度重要)】：
-                        1. 如果老闆問「明天的出餐表合適嗎」，請直接從隱藏資料中讀取【已建檔的出餐計畫】，拿它去跟【過去 10 天真實營運紀錄】做比較，告訴老闆哪幾項備太多或備太少。
-                        2. 【雙軌交叉比對】：你必須結合「長期平日均銷」與「過去 10 天真實耗損」精算建議。
-                           - 如果過去 10 天紀錄顯示「⚠️做太多，浪費」，請勇敢建議數量砍低。
-                           - 如果過去 10 天紀錄顯示「🔥做太少，缺貨」，請建議增加備料。
-                        3. 如果有提供【天氣預報】，請務必納入考量（如下雨調降，好天氣調升）。
-                        4. 如果被要求算營業額，請用提供的單價乘上數量加總。
-                        5. 回答要專業、有說服力，並加上 Emoji 讓排版好讀。
+                        【你的專業分析任務指南 (極度重要，請嚴格遵守)】：
+                        1. 【基線確立 - 尋找同星期的規律】：由於現在沒有提供長期均銷，你必須【完全依賴】上面提供的 30 天真實營運數據！當你給出明天({tomorrow_wd})的備料建議時，必須自己去數據庫找出過去 4 週內所有的 {tomorrow_wd}，算出它們的平均 POS 銷量，當作你的基準線！
+                        2. 【總產能天花板限制 (防超量)】：你在給出備料建議時，必須參考報表下方的「過去 30 天各區總產能與總銷量參考」。你的「建議總數量」絕對不可以無故大幅超過「歷史同星期」的各區總出餐量。必須在合理的總產能限制內進行分配。
+                        3. 【現場動態決策微調】：
+                           - 狀態為(🔥 現場緊急追加)：代表市場熱度高，即使有報廢，也建議在基準線上提高備料。
+                           - 狀態為(⏸️ 臨時取消出餐)：為人員排程問題，不代表該商品滯銷，不扣減銷量評估。
+                           - 狀態為(⚠️ 報廢)：真正供過於求，需下調備料。
+                        4. 🌟【打折標籤認知與毛利保護】：報表中的「📉打折出清，平均約 X 折」，是因為系統使用 (總營收/原價總營收) 計算的數學平均值。這代表「可能只有晚間少部分商品半價出清」，並非代表該商品全天都賣不掉。請綜合「報廢/缺貨」狀況客觀評估，不要看到打折就過度大砍備料；但若頻繁出現此標籤且伴隨大量報廢，請警告使用者控制報廢以保住毛利。
+                        5. 若有【天氣預報】，請務必納入考量（如下雨調降，晴朗調升）。
+                        6. 若要求計算營業額，務必將建議數量乘上單價加總。
+                        7. 嚴禁虛構數據！如果 30 天內查無該商品紀錄，請直言「無歷史數據可供分析」。
                         """
 
-                        model = genai.GenerativeModel(
-                            model_name='gemini-2.5-flash', 
-                            system_instruction=system_instruction
-                        )
+                        try:
+                            model = genai.GenerativeModel(model_name='gemini-2.5-flash', system_instruction=system_instruction)
+                        except Exception:
+                            model = genai.GenerativeModel(model_name='gemini-1.5-flash', system_instruction=system_instruction)
                         
-                        # 🌟 把所有情報打包進去
                         hidden_context = f"【隱藏系統資料】\n{weather_info}\n{current_plan_report}\n【使用者提問】\n"
                         full_prompt = hidden_context + prompt
 
@@ -281,6 +327,6 @@ def render_ai_assistant(dept_name, display_df):
                     except Exception as e:
                         error_msg = str(e)
                         if "429" in error_msg or "Quota exceeded" in error_msg:
-                            st.warning("⏳ 喔喔！您問得太快了！ 的免費額度限制為「每分鐘 5 次」。請稍等 1 分鐘後再試一次喔！")
+                            st.warning("⏳ 喔喔！您問得太快了！免費額度限制為「每分鐘 5 次」。請稍等 1 分鐘後再試一次喔！")
                         else:
                             st.error(f"❌ AI 發生異常: {e}")
