@@ -5,6 +5,9 @@ from google.oauth2.service_account import Credentials
 import os
 import time
 
+# ==========================================
+# ☁️ 雲端資料庫設定
+# ==========================================
 SHEET_NAME = "阿布潘出餐系統_雲端資料庫"
 WORKSHEET_NAME = "daily_records"
 
@@ -29,6 +32,8 @@ def get_gspread_client():
         st.error(f"❌ 資料庫連線失敗: {e}")
         return None
 
+# 🌟 升級 1：快取工作表物件，減少 open() 造成的請求浪費
+@st.cache_resource(ttl=3600)
 def get_worksheet():
     client = get_gspread_client()
     if client:
@@ -37,19 +42,39 @@ def get_worksheet():
         except Exception as e:
             st.error(f"❌ 找不到指定的試算表: {e}")
             return None
+    return None
 
-def _get_cloud_dataframe(sheet):
+# 🌟 升級 2：超級快取核心！30秒內無論系統要讀幾次，都不消耗 Google 額度！
+@st.cache_data(ttl=30, show_spinner=False)
+def get_cached_all_records():
+    sheet = get_worksheet()
+    if not sheet: return None
     try:
-        data = sheet.get_all_records()
+        return sheet.get_all_records()
+    except Exception:
+        return None
+
+# 加入 sheet=None 參數，維持向下相容，不讓 ai_engine 報錯
+def _get_cloud_dataframe(sheet=None):
+    try:
+        # 改從記憶體拿資料
+        data = get_cached_all_records()
+        if data is None:
+            return None
+            
         df = pd.DataFrame(data)
         
         expected_cols = ['date', 'cart_key', 'item_id', 'name', 'cat', 'ordered_qty', 'actual_qty', 'pos_qty', 'pos_revenue', 'price', 'plan_operator', 'plan_time', 'report_operator', 'report_time']
         
         if df.empty:
-            headers = sheet.row_values(1)
-            if not headers:
+            sheet_obj = get_worksheet()
+            if sheet_obj:
+                headers = sheet_obj.row_values(1)
+                if not headers:
+                    headers = expected_cols
+                    sheet_obj.append_row(headers)
+            else:
                 headers = expected_cols
-                sheet.append_row(headers)
             df = pd.DataFrame(columns=headers)
             
         for col in ['plan_operator', 'plan_time', 'report_operator', 'report_time']:
@@ -60,11 +85,9 @@ def _get_cloud_dataframe(sheet):
         if 'cart_key' in df.columns: df['cart_key'] = df['cart_key'].astype(str)
         if 'date' in df.columns: df['date'] = df['date'].astype(str)
         
-        # 🌟 自動清除因為連線不穩產生的「幽靈表頭」
         if not df.empty and 'date' in df.columns:
             df = df[df['date'] != 'date'].copy()
             
-        # 🌟 自動清除「連點按鈕」造成的重複商品，永遠只保留最後一次的紀錄！
         if not df.empty and 'date' in df.columns and 'cart_key' in df.columns:
             df = df.drop_duplicates(subset=['date', 'cart_key'], keep='last')
             
@@ -79,7 +102,6 @@ def _sync_to_cloud(sheet, df):
     body = df_safe.astype(str).values.tolist()
     data_to_upload = [headers] + body
     
-    # 🌟 指數退避重試，防當機
     max_retries = 5
     for attempt in range(max_retries):
         try:
@@ -88,6 +110,9 @@ def _sync_to_cloud(sheet, df):
                 sheet.update(data_to_upload)
             except Exception:
                 sheet.update('A1', data_to_upload)
+                
+            # 🌟 升級 3：成功寫入後，立刻清除快取！確保大家下一秒看到的都是最新資料！
+            get_cached_all_records.clear()
             return 
         except Exception as e:
             if attempt < max_retries - 1:
@@ -99,10 +124,7 @@ def _sync_to_cloud(sheet, df):
 # 系統核心存取功能
 # ==========================================
 def load_daily_record(date_str):
-    sheet = get_worksheet()
-    if not sheet: return pd.DataFrame()
-    
-    df = _get_cloud_dataframe(sheet)
+    df = _get_cloud_dataframe()
     if df is None or df.empty: return pd.DataFrame()
     
     df_filtered = df[df['date'] == str(date_str)].copy()
@@ -115,7 +137,7 @@ def save_ordered_data(date_str, cart_items):
     sheet = get_worksheet()
     if not sheet: return
     
-    df = _get_cloud_dataframe(sheet)
+    df = _get_cloud_dataframe()
     if df is None:
         st.error("🚨 資料庫連線不穩，已攔截本次存檔。")
         return
@@ -128,7 +150,6 @@ def save_ordered_data(date_str, cart_items):
             df.at[idx, 'plan_operator'] = str(item.get('operator', '未記錄'))
             df.at[idx, 'plan_time'] = str(item.get('update_time', '未記錄'))
             df.at[idx, 'price'] = int(item.get('price', 0))
-            # 🌟 補登時順便更新實際數量
             if 'actual_qty' in item: df.at[idx, 'actual_qty'] = int(item['actual_qty'])
             if 'report_operator' in item: df.at[idx, 'report_operator'] = str(item['report_operator'])
             if 'report_time' in item: df.at[idx, 'report_time'] = str(item['report_time'])
@@ -140,7 +161,7 @@ def save_ordered_data(date_str, cart_items):
                 'name': str(item['name']),
                 'cat': str(item['cat']),
                 'ordered_qty': int(item['qty']),
-                'actual_qty': int(item.get('actual_qty', 0)), # 🌟 直接塞入實際數量
+                'actual_qty': int(item.get('actual_qty', 0)), 
                 'pos_qty': 0,
                 'pos_revenue': 0, 
                 'price': int(item.get('price', 0)), 
@@ -157,7 +178,7 @@ def save_ordered_data(date_str, cart_items):
 def update_record_qty(date_str, cart_key, field, new_qty):
     sheet = get_worksheet()
     if not sheet: return
-    df = _get_cloud_dataframe(sheet)
+    df = _get_cloud_dataframe()
     if df is None: return 
     mask = (df['date'] == str(date_str)) & (df['cart_key'] == str(cart_key))
     if mask.any():
@@ -168,7 +189,7 @@ def update_record_qty(date_str, cart_key, field, new_qty):
 def delete_order_item(date_str, cart_key):
     sheet = get_worksheet()
     if not sheet: return
-    df = _get_cloud_dataframe(sheet)
+    df = _get_cloud_dataframe()
     if df is None: return 
     mask = (df['date'] == str(date_str)) & (df['cart_key'] == str(cart_key))
     if mask.any():
@@ -178,7 +199,7 @@ def delete_order_item(date_str, cart_key):
 def batch_update_record_qty(date_str, updates_dict, current_user="", current_time=""):
     sheet = get_worksheet()
     if not sheet: return
-    df = _get_cloud_dataframe(sheet)
+    df = _get_cloud_dataframe()
     
     if df is None:
         st.error("🚨 連線不穩已攔截回報。")
