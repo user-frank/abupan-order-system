@@ -35,7 +35,7 @@ def get_tomorrow_weather(city_name="臺中市", district_name="北屯區"):
     params = {"Authorization": CWA_API_KEY, "locationName": district_name, "format": "JSON"}
     
     try:
-        response = requests.get(url, params=params, timeout=5, verify=False)
+        response = requests.get(url, params=params, timeout=15, verify=False)
         response.raise_for_status()
         
         tw_now = datetime.now(TW_TZ)
