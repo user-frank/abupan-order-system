@@ -2,6 +2,7 @@ import pandas as pd
 import os
 import streamlit as st
 import time
+from datetime import datetime, timedelta, timezone # 🌟 新增時間模組
 from record_engine import get_worksheet, _get_cloud_dataframe
 
 IMAGE_BASE_DIR = "product_images"
@@ -120,41 +121,42 @@ def load_sales_data():
             
     if combined_list:
         final_df = pd.concat(combined_list, ignore_index=True)
-        final_df['item_id'] = final_df['item_id'].astype(str) # 🛡️ 確保基礎資料為字串
+        final_df['item_id'] = final_df['item_id'].astype(str) 
         final_df = final_df.drop_duplicates(subset=['item_id'], keep='last')
     else:
         final_df = pd.DataFrame(columns=['item_id', 'name', 'cat', 'price'])
         
     # ==========================================
-    # 🌟 雲端自動學習定價：精準型態配對版
+    # 🌟 雲端自動學習定價：防護時空悖論版
     # ==========================================
     try:
         sheet = get_worksheet()
         if sheet:
             cloud_df = _get_cloud_dataframe(sheet)
             if not cloud_df.empty and 'price' in cloud_df.columns:
-                # 確保雲端的 price 有意義
                 valid_price_df = cloud_df[pd.to_numeric(cloud_df['price'], errors='coerce') > 0].copy()
+                
                 if not valid_price_df.empty:
-                    valid_price_df = valid_price_df.sort_values(by='date', ascending=True)
+                    # 🌟【終極修復】：絕對不可以拿「未來日期」來學習定價！
+                    TW_TZ = timezone(timedelta(hours=8))
+                    today_str = datetime.now(TW_TZ).strftime("%Y-%m-%d")
+                    # 只篩選出日期小於等於「今天」的紀錄
+                    valid_price_df = valid_price_df[valid_price_df['date'] <= today_str]
                     
-                    # 🛡️【極度重要】：把雲端的 item_id 強制切割並轉成純字串，例如將 "80001.0" 轉成 "80001"
-                    valid_price_df['clean_id'] = valid_price_df['item_id'].astype(str).str.split('_').str[0].str.replace(r'\.0$', '', regex=True)
-                    
-                    # 建立最新價格字典 {"80001": 258, "80004": 238}
-                    latest_prices = valid_price_df.groupby('clean_id')['price'].last().to_dict()
-                    
-                    # 將價格映射回我們的主菜單 (找不到就維持原價)
-                    final_df['price'] = final_df.apply(
-                        lambda row: latest_prices.get(str(row['item_id']), row.get('price', 0)), 
-                        axis=1
-                    )
+                    if not valid_price_df.empty:
+                        valid_price_df = valid_price_df.sort_values(by='date', ascending=True)
+                        valid_price_df['clean_id'] = valid_price_df['item_id'].astype(str).str.split('_').str[0].str.replace(r'\.0$', '', regex=True)
+                        latest_prices = valid_price_df.groupby('clean_id')['price'].last().to_dict()
+                        
+                        final_df['price'] = final_df.apply(
+                            lambda row: latest_prices.get(str(row['item_id']), row.get('price', 0)), 
+                            axis=1
+                        )
     except Exception as e:
         print(f"定價學習失敗: {e}")
         pass
     
     final_df['img'] = final_df['item_id'].apply(lambda x: image_lookup.get(str(x), DEFAULT_IMAGE))
-    # 維持向下相容
     final_df['wd_avg'] = 0 
     final_df['we_avg'] = 0 
     
