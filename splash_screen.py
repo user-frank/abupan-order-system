@@ -89,9 +89,9 @@ def show_splash_screen():
     <!-- 畫面內容區塊 -->
     <div id="splash-screen">
         <div class="splash-title">
-            🐟 <span class="gold-text">阿布潘員工系統</span>
+            🐟 <span class="gold-text">阿布潘水產</span>
         </div>
-        <div class="splash-subtitle">INTELLIGENT SYSTEM</div>
+        <div class="splash-subtitle">智慧餐飲營運管理平台</div>
         <div class="spinner"></div>
     </div>
     """
