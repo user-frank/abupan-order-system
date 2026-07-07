@@ -84,6 +84,26 @@ def show():
     today_str = datetime.today().strftime("%Y-%m-%d")
 
     st.markdown("### 📸 現場紀實與照片回報測試")
+
+    # 🌟 【影像修復黑魔法】：解除 app.py 帶來的高度封印
+    st.markdown("""
+    <style>
+    /* 1. 讓相簿區的圖片維持真實比例，不要被壓扁成 220px */
+    div[data-testid="stImage"] img {
+        height: auto !important;
+        max-height: 500px !important; /* 限制最高不要超過半個螢幕，方便滑動 */
+        object-fit: contain !important; /* 保留完整圖片，不裁切 */
+    }
+    
+    /* 2. 當老闆點擊「全螢幕放大」時，徹底解放高度限制，顯示超大原圖！ */
+    div[data-testid="stFullScreenFrame"] img {
+        height: 100vh !important;
+        max-height: 100vh !important;
+        object-fit: contain !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
     test_role = st.radio("👀 切換測試視角：", ["🧑‍🍳 現場員工 (只能看本月)", "👑 老闆 (可看全部)"], horizontal=True)
 
     tab_upload, tab_view = st.tabs(["📤 1. 上傳照片", "🖼️ 2. 檢視歷史相簿"])
