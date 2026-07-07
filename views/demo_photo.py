@@ -33,9 +33,8 @@ def compress_image(uploaded_file):
     return output.getvalue()
 
 def upload_photo_to_drive(file_bytes, filename):
-    """🌟 全新升級：透過隧道將照片傳入老闆的 5TB 雲端硬碟"""
+    """🌟 升級版隧道：帶有強效除錯照妖鏡"""
     try:
-        # 將照片轉成編碼字串，準備通過隧道
         b64_str = base64.b64encode(file_bytes).decode('utf-8')
         
         payload = {
@@ -45,17 +44,25 @@ def upload_photo_to_drive(file_bytes, filename):
             "image_base64": b64_str
         }
         
-        # 呼叫我們的專屬接應員
+        # 呼叫專屬接應員
         res = requests.post(GAS_URL, json=payload, timeout=30)
-        data = res.json()
+        
+        # 🌟 照妖鏡：如果 Google 回傳的不是 JSON，直接把 Google 說的話印出來！
+        try:
+            data = res.json()
+        except Exception as e:
+            st.error(f"❌ 解析失敗！Google 伺服器回傳了未知的內容。")
+            st.code(res.text, language="html") # 把 Google 擋人的畫面印出來看
+            return None
         
         if data.get("status") == "success":
             return f"https://drive.google.com/uc?id={data['file_id']}"
         else:
-            st.error(f"上傳失敗：{data.get('message')}")
+            st.error(f"❌ 上傳失敗 (Apps Script 錯誤)：{data.get('message')}")
             return None
+            
     except Exception as e:
-        st.error(f"上傳通道發生異常：{e}")
+        st.error(f"❌ 隧道連線發生嚴重異常：{e}")
         return None
 
 def save_photo_record_to_sheet(records):
