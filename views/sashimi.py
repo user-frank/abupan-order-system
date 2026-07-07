@@ -9,6 +9,12 @@ from bom_engine import calculate_bom
 # 🌟 導入雲端設定引擎 (確保有匯入庫存追蹤函數)
 from config_engine import load_menu_template, save_menu_template, load_custom_items, save_custom_items, load_subcategories, save_subcategories, load_inventory_tracking, save_inventory_tracking
 
+# 🌟 導入 AI 助理
+try:
+    from ai_engine import render_ai_assistant
+except ImportError:
+    render_ai_assistant = None
+
 def show():
     current_user = st.session_state.get("user_name", "未知操作員")
     DEPT_NAME = "生魚片" 
@@ -79,7 +85,7 @@ def show():
     subcat_dict = load_subcategories(DEPT_NAME)
     sashimi_df['subcat'] = sashimi_df['item_id'].map(lambda x: subcat_dict.get(x, "生魚片區"))
 
-    # 🌟 修復 ValueError：給予三個變數來接這三個分頁！
+    # 🌟 絕對防護：給予三個變數來接這三個分頁！
     tab_plan, tab_report, tab_stock = st.tabs(["📝 1. 預估出餐", "✅ 2. 實際回報", "📦 3. 原料庫存"])
 
     # ==========================================
@@ -157,7 +163,7 @@ def show():
                 st.rerun()
 
             st.divider()
-            st.markdown("#### 3️⃣ 新增  新產品")
+            st.markdown("#### 3️⃣ 新增「ERP 尚未建檔」的新產品")
             col_id, col_name, col_btn = st.columns([2, 4, 2])
             with col_id: new_c_id = st.text_input("自訂編號 (選填)", key="sashimi_new_c_id")
             with col_name: new_c_name = st.text_input("新商品名稱 (必填)", key="sashimi_new_c_name")
@@ -174,12 +180,12 @@ def show():
                         
                         existing_ids = sashimi_df['item_id'].values
                         if final_id in existing_ids:
-                            st.error(f"❌ 錯誤：編號 '{final_id}' 已存在！")
+                            st.error(f"❌ 錯誤：編號 '{final_id}' 已存在於系統中！")
                         else:
                             c_list = load_custom_items(DEPT_NAME)
                             c_list.append({"item_id": final_id, "name": new_c_name})
                             save_custom_items(DEPT_NAME, c_list)
-                            st.success(f"✅ {new_c_name} 已成功加入！")
+                            st.success(f"✅ {new_c_name} 已成功加入雲端！")
                             st.rerun()
         
         display_df = sashimi_df[sashimi_df['item_id'].isin(active_item_ids)].copy()
@@ -235,6 +241,7 @@ def show():
             st.markdown("##### 🛒 本次臨時客製清單")
             for idx, item in enumerate(st.session_state.sashimi_temp_items):
                 st.markdown(f"- {item['name']} ➜ **{item['qty']} 份**")
+            # 🌟 修復處：移除 size="small"
             if st.button("🗑️ 清除臨時清單", key="sashimi_btn_clear_temp"):
                 st.session_state.sashimi_temp_items = []
                 st.rerun()
@@ -288,7 +295,7 @@ def show():
                 
                 save_ordered_data(target_date_str, cart_dict)
                 
-                msg = f"🔪 【阿布潘-生魚片部】 🐟\n🗓️ 日期：{target_date_display}\n👨‍💻 人員：{current_user}\n──────────────────\n📋 【預估出餐明細】\n"
+                msg = f"🔪 【阿布潘-生魚片部】 🐟\n🗓️ 出餐日期：{target_date_display}\n👨‍💻 填表人員：{current_user}\n──────────────────\n📋 【預估出餐明細】\n"
                 total_plan_qty = 0
                 
                 for g_name in ["生魚片區", "小品區", "臨時客製區"]:
@@ -296,7 +303,7 @@ def show():
                     if g_items:
                         msg += f"\n📁 [{g_name}]\n"
                         for d in g_items:
-                            msg += f" {d['name']} ➜ {d['qty']} 份\n"
+                            msg += f"🔸 {d['name']} ➜ {d['qty']} 份\n"
                             total_plan_qty += d['qty']
                 
                 msg += f"\n(今日預估總份數 = {total_plan_qty} 份)\n"
@@ -306,6 +313,10 @@ def show():
                 st.session_state['sashimi_plan_msg'] = msg
                 st.session_state['sashimi_plan_url'] = f"https://line.me/R/msg/text/?{urllib.parse.quote(msg)}"
                 st.rerun()
+                
+        # 🌟 召喚 AI 助理出現在出餐表的正下方
+        if render_ai_assistant is not None:
+            render_ai_assistant(DEPT_NAME, display_df)
 
     # ==========================================
     # 分頁 2：實際回報
@@ -385,7 +396,6 @@ def show():
                     st.rerun()
                 st.divider()
 
-            # 🌟 防連點按鈕
             btn_rep_ph = st.empty()
             if btn_rep_ph.button("💾 儲存回報並產生 LINE 指令", type="primary", use_container_width=True, key="sashimi_btn_save_report"):
                 btn_rep_ph.button("⏳ 回報寫入中，請稍候...", disabled=True, use_container_width=True, key="sashimi_btn_save_report_load")
@@ -394,7 +404,8 @@ def show():
                 if actual_updates:
                     batch_update_record_qty(date_str, actual_updates, current_user, current_time)
                 
-                msg = f"🔪 【阿布潘-生魚片部】 🐟\n🗓️ 日期：{report_date_display}\n👨‍💻 人員：{current_user}\n──────────────────\n📋 【本日實際出餐數量】\n"
+                msg = f"🔪 【阿布潘-生魚片部】 🐟\n🗓️ 出餐日期：{report_date_display}\n👨‍💻 回報人員：{current_user}\n──────────────────\n📋 【本日實際出餐數量】\n"
+                
                 total_o_qty = 0
                 total_a_qty = 0
                 
@@ -429,7 +440,6 @@ def show():
             ad_hoc_opt = st.selectbox("選擇臨時加出的品項", all_sashimi_options, key="sashimi_adhoc_sel")
             ad_hoc_qty = st.number_input("實際出餐數量", min_value=1, step=1, key="sashimi_adhoc_qty")
             
-            # 🌟 防連點按鈕 (合併寫入防當機)
             btn_adhoc_ph = st.empty()
             if btn_adhoc_ph.button("➕ 立即補登至今日回報單", use_container_width=True, key="sashimi_btn_add_adhoc"):
                 btn_adhoc_ph.button("⏳ 補登資料寫入中...", disabled=True, use_container_width=True, key="sashimi_btn_add_adhoc_load")
@@ -452,10 +462,10 @@ def show():
                 st.rerun()
 
     # ==========================================
-    # 分頁 3：原料庫存 (Tab 3 獨立運作)
+    # 分頁 3：原料庫存 (Tab 3)
     # ==========================================
     with tab_stock:
-        st.markdown("#### 📦 核心原料庫存")
+        st.markdown("#### 📦 部門核心原料庫存")
         st.markdown("<p style='font-size:13px; color:#888;'>此清單庫存由 ERP 系統定時自動更新。您可以在此新增或移除需要追蹤的原料。</p>", unsafe_allow_html=True)
         
         stock_list = load_inventory_tracking(DEPT_NAME)
@@ -478,13 +488,12 @@ def show():
                             st.rerun()
 
         st.divider()
-        with st.expander("➕ 新增要追蹤的 原料"):
+        with st.expander("➕ 新增要追蹤的 ERP 原料"):
             col_id, col_name, col_btn = st.columns([3, 4, 3])
             with col_id: new_s_id = st.text_input("ERP 原料編號 (必填)", key="stock_new_id", placeholder="例如: 20009")
             with col_name: new_s_name = st.text_input("原料名稱 (必填)", key="stock_new_name", placeholder="例如: 整尾鮭魚")
             with col_btn:
                 st.markdown("<div style='margin-top:28px;'></div>", unsafe_allow_html=True)
-                # 🌟 防連點按鈕
                 btn_stock_ph = st.empty()
                 if btn_stock_ph.button("➕ 加入追蹤", type="primary", use_container_width=True, key="btn_add_stock"):
                     btn_stock_ph.button("⏳ 加入中...", disabled=True, use_container_width=True, key="btn_add_stock_load")
@@ -496,9 +505,9 @@ def show():
                         stock_list.append({
                             "item_id": new_s_id.strip(),
                             "name": new_s_name.strip(),
-                            "qty": "等待 同步...",
+                            "qty": "等待 ERP 同步...",
                             "time": "尚未更新"
                         })
                         save_inventory_tracking(DEPT_NAME, stock_list)
-                        st.success("✅ 加入成功！下次 同步時將抓取庫存。")
+                        st.success("✅ 加入成功！下次 ERP 同步時將抓取庫存。")
                         st.rerun()
