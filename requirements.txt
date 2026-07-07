@@ -6,3 +6,4 @@ openpyxl
 xlrd
 streamlit-authenticator
 google-genai
+google-api-python-client
