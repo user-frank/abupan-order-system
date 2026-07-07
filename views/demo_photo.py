@@ -85,19 +85,46 @@ def show():
 
     st.markdown("### 📸 現場紀實與照片回報測試")
 
-    # 🌟 【影像修復黑魔法：只針對全螢幕放大解鎖】
+    # 🌟 【終極影像修復黑魔法：強制鎖死外框，消滅黑邊！】
     st.markdown("""
     <style>
-    /* 當老闆點擊「全螢幕放大」時，徹底解除 app.py 的高度限制，顯示不被裁切的原圖！ */
-    div[data-testid="stFullScreenFrame"] img {
+    /* 1. 預覽圖【外框】：強制鎖死 280px 高度，超過的部分直接切掉，不准長高！ */
+    div[data-testid="stImage"] {
+        height: 280px !important;
+        overflow: hidden !important;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: #1E1E1E; /* 如果有極小縫隙用暗色填補 */
+    }
+    
+    /* 2. 預覽圖【本體】：等比例放大填滿外框，絕對不留黑邊 (cover) */
+    div[data-testid="stImage"] img {
+        height: 100% !important;
+        width: 100% !important;
+        object-fit: cover !important; 
+    }
+    
+    /* 3. 全螢幕【放大時】：徹底解除所有高度封印！還原真實比例 (contain) */
+    div[data-testid="stFullScreenFrame"], 
+    div[data-testid="stFullScreenFrame"] > div {
         height: 100vh !important;
-        max-height: 100vh !important;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    div[data-testid="stFullScreenFrame"] img {
+        height: auto !important;
+        max-height: 95vh !important;
         width: auto !important;
         max-width: 100vw !important;
         object-fit: contain !important; 
     }
     </style>
     """, unsafe_allow_html=True)
+
+    st.markdown("### 📸 現場紀實與照片回報測試")
     
     test_role = st.radio("👀 切換測試視角：", ["🧑‍🍳 現場員工 (只能看本月)", "👑 老闆 (可看全部)"], horizontal=True)
 
