@@ -85,17 +85,10 @@ def show():
 
     st.markdown("### 📸 現場紀實與照片回報測試")
 
-    # 🌟 【影像修復黑魔法 2.0：整齊預覽 + 完美放大】
+    # 🌟 【影像修復黑魔法：只針對全螢幕放大解鎖】
     st.markdown("""
     <style>
-    /* 1. 相簿區預覽圖：維持整齊的方塊，高度比原本稍微放大到 280px，多餘部分自動裁切填滿 */
-    div[data-testid="stImage"] img {
-        height: 280px !important; 
-        object-fit: cover !important; 
-        border-radius: 8px;
-    }
-    
-    /* 2. 全螢幕放大時：徹底解除封印！顯示完整比例，絕對不裁切 */
+    /* 當老闆點擊「全螢幕放大」時，徹底解除 app.py 的高度限制，顯示不被裁切的原圖！ */
     div[data-testid="stFullScreenFrame"] img {
         height: 100vh !important;
         max-height: 100vh !important;
