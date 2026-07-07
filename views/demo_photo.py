@@ -33,7 +33,7 @@ def compress_image(uploaded_file):
     return output.getvalue()
 
 def upload_photo_to_drive(file_bytes, filename):
-    """🌟 升級版隧道：帶有強效除錯照妖鏡"""
+    """透過隧道將照片傳入 5TB 雲端硬碟"""
     try:
         b64_str = base64.b64encode(file_bytes).decode('utf-8')
         
@@ -44,25 +44,17 @@ def upload_photo_to_drive(file_bytes, filename):
             "image_base64": b64_str
         }
         
-        # 呼叫專屬接應員
         res = requests.post(GAS_URL, json=payload, timeout=30)
-        
-        # 🌟 照妖鏡：如果 Google 回傳的不是 JSON，直接把 Google 說的話印出來！
-        try:
-            data = res.json()
-        except Exception as e:
-            st.error(f"❌ 解析失敗！Google 伺服器回傳了未知的內容。")
-            st.code(res.text, language="html") # 把 Google 擋人的畫面印出來看
-            return None
+        data = res.json()
         
         if data.get("status") == "success":
-            return f"https://drive.google.com/uc?id={data['file_id']}"
+            # 🌟 破解 Google 防盜連：改用 Thumbnail API 格式！
+            return f"https://drive.google.com/thumbnail?id={data['file_id']}&sz=w1000"
         else:
-            st.error(f"❌ 上傳失敗 (Apps Script 錯誤)：{data.get('message')}")
+            st.error(f"上傳失敗：{data.get('message')}")
             return None
-            
     except Exception as e:
-        st.error(f"❌ 隧道連線發生嚴重異常：{e}")
+        st.error(f"上傳通道發生異常：{e}")
         return None
 
 def save_photo_record_to_sheet(records):
@@ -122,7 +114,6 @@ def show():
                         compressed_bytes = compress_image(file)
                         filename = f"{today_str}_{DEPT_NAME}_{selected_cat}_{i}.jpg"
                         
-                        # 🌟 呼叫全新上傳隧道
                         drive_url = upload_photo_to_drive(compressed_bytes, filename)
                         
                         if drive_url:
@@ -160,16 +151,29 @@ def show():
         else:
             st.markdown("#### 🔍 歷史影像調閱")
             
+            # 🌟 權限切換：老闆多了一個「部門篩選器」！
             if "老闆" in test_role:
-                date_filter = st.date_input("🗓️ 選擇調閱日期：", value=datetime.today())
+                col1, col2 = st.columns(2)
+                with col1:
+                    date_filter = st.date_input("🗓️ 選擇調閱日期：", value=datetime.today())
+                with col2:
+                    # 去資料庫撈出所有有上傳過照片的部門
+                    all_depts = ["顯示全部"] + list(db["dept"].astype(str).unique())
+                    dept_filter = st.selectbox("🏢 選擇部門：", all_depts)
             else:
                 min_date = datetime.today().replace(day=1)
                 max_date = datetime.today()
                 date_filter = st.date_input("🗓️ 選擇調閱日期 (限本月)：", value=max_date, min_value=min_date, max_value=max_date)
+                dept_filter = DEPT_NAME # 員工強制只能看自己的部門
             
             cat_filter = st.selectbox("📌 選擇分類：", ["顯示全部"] + categories)
             
+            # 依據篩選器過濾照片庫
             view_db = db[db["date"] == date_filter.strftime("%Y-%m-%d")]
+            
+            if dept_filter != "顯示全部":
+                view_db = view_db[view_db["dept"] == dept_filter]
+                
             if cat_filter != "顯示全部":
                 view_db = view_db[view_db["category"] == cat_filter]
                 
@@ -178,12 +182,22 @@ def show():
             
             if not view_db.empty:
                 cols = st.columns(2) 
+                
                 for idx, row in view_db.iterrows():
                     with cols[idx % 2]:
                         with st.container(border=True):
-                            st.image(row["photo_url"], use_container_width=True)
+                            
+                            # 🌟 強效救援：把舊的錯誤網址自動轉成正確的 Thumbnail API 網址
+                            display_url = str(row["photo_url"])
+                            if "/uc?id=" in display_url:
+                                display_url = display_url.replace("/uc?id=", "/thumbnail?id=") + "&sz=w1000"
+                            
+                            # 顯示圖片！
+                            st.image(display_url, use_container_width=True)
+                            
                             st.markdown(f"""
                             <div style='font-size:13px; color:#ddd;'>
+                                🏢 <b>部門：</b>{row['dept']}<br>
                                 🏷️ <b>分類：</b>{row['category']}<br>
                                 👤 <b>上傳者：</b>{row['uploader']} ({row['time']})
                             </div>
