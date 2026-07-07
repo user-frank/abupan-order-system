@@ -93,6 +93,10 @@ if is_logged_in:
     if current_dept == "總管理":
         from views import boss
         boss.show()
+
+    elif current_dept == "測試部":       # 🌟 新增這兩行
+        from views import demo_photo    # 🌟 讓系統轉接到測試房間
+        demo_photo.show()
         
     elif current_dept == "壽司":
         from views import sushi
