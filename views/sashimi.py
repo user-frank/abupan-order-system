@@ -6,7 +6,8 @@ from data_engine import load_sales_data
 from record_engine import save_ordered_data, load_daily_record, batch_update_record_qty
 from bom_engine import calculate_bom
 
-from config_engine import load_menu_template, save_menu_template, load_custom_items, save_custom_items, load_subcategories, save_subcategories
+from config_engine import load_menu_template, save_menu_template, load_custom_items, save_custom_items, load_subcategories, save_subcategories, load_inventory_tracking, save_inventory_tracking
+
 
 def show():
     current_user = st.session_state.get("user_name", "未知操作員")
@@ -92,7 +93,7 @@ def show():
     subcat_dict = load_subcategories(DEPT_NAME)
     sashimi_df['subcat'] = sashimi_df['item_id'].map(lambda x: subcat_dict.get(x, "生魚片區"))
 
-    tab_plan, tab_report = st.tabs(["📝 1. 預估出餐", "✅ 2. 實際回報"])
+    tab_plan, tab_report = st.tabs(["📝 1. 預估出餐", "✅ 2. 實際回報", "📦 3. 原料庫存"])
 
     # ==========================================
     # 分頁 1：預估出餐
@@ -459,3 +460,57 @@ def show():
                 
                 st.success(f"✅ {ad_name} 補登成功！")
                 st.rerun()
+
+# ==========================================
+    # 分頁 3：原料庫存追蹤 (Tab 3 獨立運作，不干擾前面邏輯)
+    # ==========================================
+    with tab_stock:
+        st.markdown("#### 📦 部門核心原料庫存")
+        st.markdown("<p style='font-size:13px; color:#888;'>此清單庫存由 ERP 系統定時自動更新。您可以在此新增或移除需要追蹤的原料。</p>", unsafe_allow_html=True)
+        
+        # 讀取目前追蹤中的清單
+        stock_list = load_inventory_tracking(DEPT_NAME)
+        
+        # 顯示庫存卡片
+        if not stock_list:
+            st.info("目前尚未設定任何需要追蹤的原料。")
+        else:
+            cols = st.columns(2)
+            for idx, item in enumerate(stock_list):
+                with cols[idx % 2]:
+                    with st.container(border=True):
+                        st.markdown(f"<div style='font-size:15px; font-weight:bold; color:white;'>{item['name']} <span style='font-size:12px; color:#888;'>({item['item_id']})</span></div>", unsafe_allow_html=True)
+                        st.markdown(f"<div style='font-size:22px; color:#4CAF50; font-weight:bold; margin-top:5px;'>{item['qty']} <span style='font-size:14px; color:#ccc; font-weight:normal;'>單位</span></div>", unsafe_allow_html=True)
+                        st.markdown(f"<div style='font-size:11px; color:#888;'>最後更新: {item['time']}</div>", unsafe_allow_html=True)
+                        
+                        # 提供刪除按鈕
+                        if st.button("🗑️ 移除追蹤", key=f"del_stock_{item['item_id']}", use_container_width=True):
+                            new_list = [x for x in stock_list if x['item_id'] != item['item_id']]
+                            with st.spinner("移除中..."):
+                                save_inventory_tracking(DEPT_NAME, new_list)
+                            st.rerun()
+
+        st.divider()
+        # 新增追蹤原料的表單
+        with st.expander("➕ 新增要追蹤的 ERP 原料"):
+            col_id, col_name, col_btn = st.columns([3, 4, 3])
+            with col_id: new_s_id = st.text_input("ERP 原料編號 (必填)", key="stock_new_id", placeholder="例如: 20009")
+            with col_name: new_s_name = st.text_input("原料名稱 (必填)", key="stock_new_name", placeholder="例如: 整尾鮭魚")
+            with col_btn:
+                st.markdown("<div style='margin-top:28px;'></div>", unsafe_allow_html=True)
+                if st.button("➕ 加入追蹤", type="primary", use_container_width=True, key="btn_add_stock"):
+                    if not new_s_id.strip() or not new_s_name.strip():
+                        st.error("編號與名稱皆不能為空！")
+                    elif any(x['item_id'] == new_s_id.strip() for x in stock_list):
+                        st.warning("此原料已經在追蹤清單中了！")
+                    else:
+                        stock_list.append({
+                            "item_id": new_s_id.strip(),
+                            "name": new_s_name.strip(),
+                            "qty": "等待 ERP 同步...",
+                            "time": "尚未更新"
+                        })
+                        with st.spinner("寫入中..."):
+                            save_inventory_tracking(DEPT_NAME, stock_list)
+                        st.success("✅ 加入成功！下次 ERP 同步時將抓取庫存。")
+                        st.rerun()
