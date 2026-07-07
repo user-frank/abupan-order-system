@@ -4,6 +4,7 @@ from datetime import datetime
 import io
 import base64
 import requests
+import re # 🌟 用來解析網址的工具
 from PIL import Image, ImageOps
 from record_engine import get_gspread_client, SHEET_NAME
 
@@ -20,35 +21,27 @@ FOLDER_ID = "1axu-8dPpCkYLjNqOvc6rYeTO2rDcbM7n"
 # 📸 影像處理與上傳引擎
 # ==========================================
 def compress_image(uploaded_file):
-    """將高畫質照片壓縮，並修復 PNG 格式當機問題"""
     img = Image.open(uploaded_file)
     img = ImageOps.exif_transpose(img)
-    
     if img.mode in ("RGBA", "P"):
         img = img.convert("RGB")
-        
     img.thumbnail((1024, 1024))
     output = io.BytesIO()
     img.save(output, format="JPEG", quality=85)
     return output.getvalue()
 
 def upload_photo_to_drive(file_bytes, filename):
-    """透過隧道將照片傳入 5TB 雲端硬碟"""
     try:
         b64_str = base64.b64encode(file_bytes).decode('utf-8')
-        
         payload = {
             "folder_id": FOLDER_ID,
             "file_name": filename,
             "mime_type": "image/jpeg",
             "image_base64": b64_str
         }
-        
         res = requests.post(GAS_URL, json=payload, timeout=30)
         data = res.json()
-        
         if data.get("status") == "success":
-            # 🌟 破解 Google 防盜連：改用 Thumbnail API 格式！
             return f"https://drive.google.com/thumbnail?id={data['file_id']}&sz=w1000"
         else:
             st.error(f"上傳失敗：{data.get('message')}")
@@ -84,48 +77,6 @@ def show():
     today_str = datetime.today().strftime("%Y-%m-%d")
 
     st.markdown("### 📸 現場紀實與照片回報測試")
-
-    # 🌟 【終極影像修復黑魔法：強制鎖死外框，消滅黑邊！】
-    st.markdown("""
-    <style>
-    /* 1. 預覽圖【外框】：強制鎖死 280px 高度，超過的部分直接切掉，不准長高！ */
-    div[data-testid="stImage"] {
-        height: 280px !important;
-        overflow: hidden !important;
-        border-radius: 8px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background-color: #1E1E1E; /* 如果有極小縫隙用暗色填補 */
-    }
-    
-    /* 2. 預覽圖【本體】：等比例放大填滿外框，絕對不留黑邊 (cover) */
-    div[data-testid="stImage"] img {
-        height: 100% !important;
-        width: 100% !important;
-        object-fit: cover !important; 
-    }
-    
-    /* 3. 全螢幕【放大時】：徹底解除所有高度封印！還原真實比例 (contain) */
-    div[data-testid="stFullScreenFrame"], 
-    div[data-testid="stFullScreenFrame"] > div {
-        height: 100vh !important;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-    div[data-testid="stFullScreenFrame"] img {
-        height: auto !important;
-        max-height: 95vh !important;
-        width: auto !important;
-        max-width: 100vw !important;
-        object-fit: contain !important; 
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-    st.markdown("### 📸 現場紀實與照片回報測試")
-    
     test_role = st.radio("👀 切換測試視角：", ["🧑‍🍳 現場員工 (只能看本月)", "👑 老闆 (可看全部)"], horizontal=True)
 
     tab_upload, tab_view = st.tabs(["📤 1. 上傳照片", "🖼️ 2. 檢視歷史相簿"])
@@ -134,30 +85,22 @@ def show():
         with st.container(border=True):
             categories = ["分類_廢品紀錄", "分類_客訴處理", "分類_進貨驗收", "分類_環境清潔", "分類_其他"]
             selected_cat = st.selectbox("📌 請選擇照片分類：", categories)
-            
             st.divider()
-            
             uploaded_files = st.file_uploader(
                 "📸 請點擊拍照或從相簿選擇 (支援多選)", 
                 type=['png', 'jpg', 'jpeg'], 
                 accept_multiple_files=True
             )
-            
             if uploaded_files:
                 if st.button("🚀 確認上傳至雲端", type="primary", use_container_width=True):
-                    
                     new_records = []
                     progress_bar = st.progress(0)
                     status_text = st.empty()
-                    
                     for i, file in enumerate(uploaded_files):
                         status_text.text(f"正在壓縮與上傳第 {i+1} 張照片...")
-                        
                         compressed_bytes = compress_image(file)
                         filename = f"{today_str}_{DEPT_NAME}_{selected_cat}_{i}.jpg"
-                        
                         drive_url = upload_photo_to_drive(compressed_bytes, filename)
-                        
                         if drive_url:
                             new_records.append({
                                 "date": today_str,
@@ -167,7 +110,6 @@ def show():
                                 "time": datetime.now().strftime("%H:%M:%S"),
                                 "photo_url": drive_url
                             })
-                        
                         progress_bar.progress((i + 1) / len(uploaded_files))
                     
                     if new_records:
@@ -193,31 +135,23 @@ def show():
         else:
             st.markdown("#### 🔍 歷史影像調閱")
             
-            # 🌟 權限切換：老闆多了一個「部門篩選器」！
             if "老闆" in test_role:
                 col1, col2 = st.columns(2)
-                with col1:
-                    date_filter = st.date_input("🗓️ 選擇調閱日期：", value=datetime.today())
+                with col1: date_filter = st.date_input("🗓️ 選擇調閱日期：", value=datetime.today())
                 with col2:
-                    # 去資料庫撈出所有有上傳過照片的部門
                     all_depts = ["顯示全部"] + list(db["dept"].astype(str).unique())
                     dept_filter = st.selectbox("🏢 選擇部門：", all_depts)
             else:
                 min_date = datetime.today().replace(day=1)
                 max_date = datetime.today()
                 date_filter = st.date_input("🗓️ 選擇調閱日期 (限本月)：", value=max_date, min_value=min_date, max_value=max_date)
-                dept_filter = DEPT_NAME # 員工強制只能看自己的部門
+                dept_filter = DEPT_NAME 
             
             cat_filter = st.selectbox("📌 選擇分類：", ["顯示全部"] + categories)
             
-            # 依據篩選器過濾照片庫
             view_db = db[db["date"] == date_filter.strftime("%Y-%m-%d")]
-            
-            if dept_filter != "顯示全部":
-                view_db = view_db[view_db["dept"] == dept_filter]
-                
-            if cat_filter != "顯示全部":
-                view_db = view_db[view_db["category"] == cat_filter]
+            if dept_filter != "顯示全部": view_db = view_db[view_db["dept"] == dept_filter]
+            if cat_filter != "顯示全部": view_db = view_db[view_db["category"] == cat_filter]
                 
             st.markdown(f"**共找到 {len(view_db)} 張相片**")
             st.divider()
@@ -229,13 +163,26 @@ def show():
                     with cols[idx % 2]:
                         with st.container(border=True):
                             
-                            # 🌟 強效救援：把舊的錯誤網址自動轉成正確的 Thumbnail API 網址
+                            # 🌟 【金蟬脫殼黑魔法】：取出 ID，改用 HTML 直接畫圖片！
                             display_url = str(row["photo_url"])
-                            if "/uc?id=" in display_url:
-                                display_url = display_url.replace("/uc?id=", "/thumbnail?id=") + "&sz=w1000"
+                            file_id_match = re.search(r'id=([a-zA-Z0-9_-]+)', display_url)
                             
-                            # 顯示圖片！
-                            st.image(display_url, use_container_width=True)
+                            if file_id_match:
+                                file_id = file_id_match.group(1)
+                                # 請求 Google 給一張裁切好的漂亮方塊縮圖 (寬600, 高450)
+                                thumb_url = f"https://drive.google.com/thumbnail?id={file_id}&sz=w600-h450-c"
+                                # 點擊後開啟的高畫質原圖網址
+                                view_url = f"https://drive.google.com/file/d/{file_id}/view"
+                                
+                                # 使用 HTML 渲染，完全免疫 app.py 的 CSS 污染！
+                                img_html = f"""
+                                <a href="{view_url}" target="_blank" title="點擊放大觀看高畫質原圖">
+                                    <img src="{thumb_url}" style="width: 100%; border-radius: 8px; margin-bottom: 10px; border: 1px solid rgba(255,255,255,0.1); object-fit: cover;">
+                                </a>
+                                """
+                                st.markdown(img_html, unsafe_allow_html=True)
+                            else:
+                                st.image(display_url, use_container_width=True) # 找不到ID的保底措施
                             
                             st.markdown(f"""
                             <div style='font-size:13px; color:#ddd;'>
