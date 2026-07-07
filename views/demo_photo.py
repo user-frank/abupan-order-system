@@ -91,7 +91,7 @@ def show():
     /* 1. 讓相簿區的圖片維持真實比例，不要被壓扁成 220px */
     div[data-testid="stImage"] img {
         height: auto !important;
-        max-height: 500px !important; /* 限制最高不要超過半個螢幕，方便滑動 */
+        max-height: 320px !important; /* 限制最高不要超過半個螢幕，方便滑動 */
         object-fit: contain !important; /* 保留完整圖片，不裁切 */
     }
     
