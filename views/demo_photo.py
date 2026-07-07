@@ -85,21 +85,23 @@ def show():
 
     st.markdown("### 📸 現場紀實與照片回報測試")
 
-    # 🌟 【影像修復黑魔法】：解除 app.py 帶來的高度封印
+    # 🌟 【影像修復黑魔法 2.0：整齊預覽 + 完美放大】
     st.markdown("""
     <style>
-    /* 1. 讓相簿區的圖片維持真實比例，不要被壓扁成 220px */
+    /* 1. 相簿區預覽圖：維持整齊的方塊，高度比原本稍微放大到 280px，多餘部分自動裁切填滿 */
     div[data-testid="stImage"] img {
-        height: auto !important;
-        max-height: 250px !important; /* 限制最高不要超過半個螢幕，方便滑動 */
-        object-fit: contain !important; /* 保留完整圖片，不裁切 */
+        height: 280px !important; 
+        object-fit: cover !important; 
+        border-radius: 8px;
     }
     
-    /* 2. 當老闆點擊「全螢幕放大」時，徹底解放高度限制，顯示超大原圖！ */
+    /* 2. 全螢幕放大時：徹底解除封印！顯示完整比例，絕對不裁切 */
     div[data-testid="stFullScreenFrame"] img {
         height: 100vh !important;
         max-height: 100vh !important;
-        object-fit: contain !important;
+        width: auto !important;
+        max-width: 100vw !important;
+        object-fit: contain !important; 
     }
     </style>
     """, unsafe_allow_html=True)
