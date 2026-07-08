@@ -161,7 +161,7 @@ def save_subcategories(dept_name, subcat_dict):
 @st.cache_data(ttl=30, show_spinner=False)
 def load_inventory_tracking(dept_name):
     """讀取該部門要追蹤的原料清單與最新庫存"""
-    headers = ["部門", "item_id", "品名", "庫存量", "更新時間"]
+    headers = ["部門", "item_id", "品名", "庫存量", "單位", "更新時間"]
     sheet = _get_worksheet("設定_庫存追蹤", headers)
     if not sheet: return []
     try:
@@ -173,6 +173,7 @@ def load_inventory_tracking(dept_name):
         dept_df = dept_df.rename(columns={
             "品名": "name",
             "庫存量": "qty",
+            "單位": "unit",
             "更新時間": "time"
         })
         return dept_df.to_dict('records')
@@ -181,7 +182,7 @@ def load_inventory_tracking(dept_name):
 
 def save_inventory_tracking(dept_name, items):
     """儲存該部門的庫存追蹤清單 (支援新增與刪除)"""
-    headers = ["部門", "item_id", "品名", "庫存量", "更新時間"]
+    headers = ["部門", "item_id", "品名", "庫存量", "單位", "更新時間"]
     sheet = _get_worksheet("設定_庫存追蹤", headers)
     if not sheet: return False
     try:
@@ -189,7 +190,7 @@ def save_inventory_tracking(dept_name, items):
         if not df.empty and "部門" in df.columns:
             df = df[df["部門"] != dept_name]
             
-        new_rows = [{"部門": dept_name, "item_id": str(i["item_id"]), "品名": str(i.get("name", "")), "庫存量": str(i.get("qty", 0)), "更新時間": str(i.get("time", "未更新"))} for i in items]
+        new_rows = [{"部門": dept_name, "item_id": str(i["item_id"]), "品名": str(i.get("name", "")), "庫存量": str(i.get("qty", 0)), "單位": str(i.get("unit", "")), "更新時間": str(i.get("time", "未更新"))} for i in items]
         if new_rows:
             if df.empty: df = pd.DataFrame(new_rows)
             else: df = pd.concat([df, pd.DataFrame(new_rows)], ignore_index=True)
