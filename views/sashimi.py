@@ -478,7 +478,8 @@ def show():
                 with cols[idx % 2]:
                     with st.container(border=True):
                         st.markdown(f"<div style='font-size:15px; font-weight:bold; color:white;'>{item['name']} <span style='font-size:12px; color:#888;'>({item['item_id']})</span></div>", unsafe_allow_html=True)
-                        st.markdown(f"<div style='font-size:22px; color:#4CAF50; font-weight:bold; margin-top:5px;'>{item['qty']} <span style='font-size:14px; color:#ccc; font-weight:normal;'>單位</span></div>", unsafe_allow_html=True)
+                        unit_str = item.get('unit', '')
+                        st.markdown(f"<div style='font-size:22px; color:#4CAF50; font-weight:bold; margin-top:5px;'>{item['qty']} <span style='font-size:14px; color:#ccc; font-weight:normal;'>{unit_str}</span></div>", unsafe_allow_html=True)
                         st.markdown(f"<div style='font-size:11px; color:#888;'>最後更新: {item['time']}</div>", unsafe_allow_html=True)
                         
                         if st.button("🗑️ 移除追蹤", key=f"del_stock_{item['item_id']}", use_container_width=True):
