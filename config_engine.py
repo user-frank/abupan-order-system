@@ -1,7 +1,7 @@
 import pandas as pd
 import streamlit as st
 import gspread
-from record_engine import get_gspread_client, SHEET_NAME
+from record_engine import get_worksheet, get_gspread_client, SHEET_NAME
 
 def _get_worksheet(ws_name, headers):
     client = get_gspread_client()
@@ -118,7 +118,7 @@ def save_custom_items(dept_name, items):
         return False
 
 # ==========================================
-# 3. 🌟 新增：子分類設定 (生魚片 vs 小品)
+# 3. 子分類設定 (生魚片 vs 小品)
 # ==========================================
 @st.cache_data(ttl=3600, show_spinner=False)
 def load_subcategories(dept_name):
@@ -129,7 +129,6 @@ def load_subcategories(dept_name):
         df = pd.DataFrame(sheet.get_all_records())
         if df.empty: return {}
         dept_df = df[df["部門"] == dept_name]
-        # 回傳字典：{"80001": "生魚片區", "80009": "小品區"}
         return dict(zip(dept_df['item_id'].astype(str), dept_df['子分類'].astype(str)))
     except:
         return {}
@@ -168,7 +167,14 @@ def load_inventory_tracking(dept_name):
     try:
         df = pd.DataFrame(sheet.get_all_records())
         if df.empty: return []
-        dept_df = df[df["部門"] == dept_name]
+        dept_df = df[df["部門"] == dept_name].copy()
+        
+        # 🌟 核心修復：將 Google Sheets 的中文標題，翻譯回 Python 認得的英文 Key！
+        dept_df = dept_df.rename(columns={
+            "品名": "name",
+            "庫存量": "qty",
+            "更新時間": "time"
+        })
         return dept_df.to_dict('records')
     except:
         return []
@@ -181,7 +187,6 @@ def save_inventory_tracking(dept_name, items):
     try:
         df = pd.DataFrame(sheet.get_all_records())
         if not df.empty and "部門" in df.columns:
-            # 清除該部門舊資料
             df = df[df["部門"] != dept_name]
             
         new_rows = [{"部門": dept_name, "item_id": str(i["item_id"]), "品名": str(i.get("name", "")), "庫存量": str(i.get("qty", 0)), "更新時間": str(i.get("time", "未更新"))} for i in items]
