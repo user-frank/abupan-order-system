@@ -5,7 +5,7 @@ import requests
 import urllib3
 
 # 🌟 導入 Google 最新的官方 AI 套件
-from google import genai
+import google.generativeai as genai
 from google.genai import types
 
 # 關閉 SSL 憑證警告
@@ -15,26 +15,18 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 CWA_API_KEY = "CWA-BCF9370E-EC0E-4B1A-B9B4-8DF41AEE71E6"
 
 from record_engine import get_worksheet, _get_cloud_dataframe
+from config_engine import load_subcategories
 
+# 🌟 台灣時區 (UTC+8)
 TW_TZ = timezone(timedelta(hours=8))
 
-# ==========================================
-# 🌟 【聽從 GPT 建議的終極修復】：快取 AI Client！
-# 絕對避免每次 Rerun 都重建 gRPC 連線導致 Segmentation fault！
-# ==========================================
-@st.cache_resource
-def get_ai_client():
-    """全系統共用同一個 AI 連線客戶端"""
+def check_ai_key():
     try:
         api_key = st.secrets["gemini_api_key"]
-        if not api_key: return None
-        return genai.Client(api_key=api_key)
-    except Exception as e:
-        print(f"AI Client 建立失敗: {e}")
-        return None
-
-def init_ai():
-    return get_ai_client() is not None
+        if not api_key: return False
+        return True
+    except Exception:
+        return False
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def get_tomorrow_weather(city_name="臺中市", district_name="北屯區"):
@@ -51,42 +43,34 @@ def get_tomorrow_weather(city_name="臺中市", district_name="北屯區"):
         data = response.json()
         records = data.get("records", data.get("Records", {}))
         locations_arr = records.get("locations", records.get("Locations", []))
-        if not locations_arr: return ""
+        if not locations_arr: return {"status": "error", "msg": "找不到地點資料"}
             
         loc_list = locations_arr[0].get("location", locations_arr[0].get("Location", []))
-        target_loc = loc_list[0] 
-        for loc in loc_list:
-            if loc.get("locationName", "") == district_name:
-                target_loc = loc
-                break
+        target_loc = next((loc for loc in loc_list if loc.get("locationName") == district_name), None)
+        if not target_loc: return {"status": "error", "msg": "找不到該行政區"}
                 
-        weather_elements = target_loc.get("weatherElement", [])
-        desc_element = next((we for we in weather_elements if we.get("elementName", "") == "天氣預報綜合描述"), None)
-                
-        if not desc_element: return ""
-            
-        time_list = desc_element.get("time", desc_element.get("Time", []))
-        day_weather = ""
-        night_weather = ""
+        weather_elements = {item.get("elementName", ""): item for item in target_loc.get("weatherElement", [])}
         
-        tomorrow_forecasts = []
-        for t in time_list:
-            start_time = t.get("startTime", t.get("StartTime", ""))
-            if tomorrow_str in start_time:
-                val_list = t.get("elementValue", t.get("ElementValue", []))
-                if val_list:
-                    tomorrow_forecasts.append(val_list[0].get("value", val_list[0].get("WeatherDescription", "")))
-        
-        if len(tomorrow_forecasts) >= 1: day_weather = tomorrow_forecasts[0]
-        if len(tomorrow_forecasts) >= 2: night_weather = tomorrow_forecasts[1]
-        
-        if not day_weather: day_weather = "依氣象署網站為準"
-        if not night_weather: night_weather = "依氣象署網站為準"
-                
-        return f"☀️［白天］{day_weather}\n🌙［晚上］{night_weather}"
+        def get_val(el_name, t_idx):
+            try:
+                times = weather_elements.get(el_name, {}).get("time", [])
+                t_data = [t for t in times if t.get("startTime", "").startswith(tomorrow_str)]
+                if not t_data: return "未知"
+                idx = t_idx if len(t_data) > t_idx else -1
+                return t_data[idx].get("elementValue", [])[0].get("value", "未知")
+            except: return "未知"
 
-    except Exception:
-        return ""
+        return {
+            "status": "success",
+            "location": f"{city_name}{district_name}",
+            "date": tomorrow_str,
+            "day": {"weather": get_val("天氣現象", 0), "pop": get_val("12小時降雨機率", 0), "temp": get_val("溫度", 0)},
+            "night": {"weather": get_val("天氣現象", 1), "pop": get_val("12小時降雨機率", 1), "temp": get_val("溫度", 1)},
+            "source": "交通部中央氣象署 OpenData"
+        }
+
+    except Exception as e:
+        return {"status": "error", "msg": str(e)}
 
 def get_recent_history_report(dept_name):
     try:
@@ -107,15 +91,14 @@ def get_recent_history_report(dept_name):
         if history_df.empty: return "過去 30 天內尚無營業紀錄可供分析。"
         
         for col in ['ordered_qty', 'actual_qty', 'pos_qty', 'pos_revenue', 'price']:
-            if col not in history_df.columns: history_df[col] = 0
-            history_df[col] = pd.to_numeric(history_df[col], errors='coerce').fillna(0).astype(int)
-        
+            history_df[col] = pd.to_numeric(history_df.get(col, 0), errors='coerce').fillna(0).astype(int)
+            
         history_df = history_df.sort_values(by='date', ascending=False)
-        
         weekdays_tw = ["一", "二", "三", "四", "五", "六", "日"]
-        report_text = "【過去 30 天各單品真實營運數據 (供趨勢與星期分析)】：\n"
         
+        report_text = "【過去 30 天各單品真實營運數據】：\n"
         grouped = history_df.groupby(['cat', 'name'] if 'cat' in history_df.columns else 'name')
+        
         for group_keys, item_df in grouped:
             item_name = group_keys[1] if isinstance(group_keys, tuple) else group_keys
             cat_prefix = f"[{group_keys[0]}] " if isinstance(group_keys, tuple) and dept_name == "總管理處" else ""
@@ -123,44 +106,24 @@ def get_recent_history_report(dept_name):
             report_text += f"\n🔹 {cat_prefix}{item_name}:\n"
             for _, row in item_df.iterrows():
                 d_str = row['date']
-                d_obj = datetime.strptime(d_str, "%Y-%m-%d")
-                wd_str = weekdays_tw[d_obj.weekday()]
+                wd_str = weekdays_tw[datetime.strptime(d_str, "%Y-%m-%d").weekday()]
                 
-                o_qty = row['ordered_qty']
-                a_qty = row['actual_qty']
-                p_qty = row['pos_qty']
-                p_rev = row['pos_revenue']
-                price = row['price']
+                o_qty, a_qty, p_qty, p_rev, price = row['ordered_qty'], row['actual_qty'], row['pos_qty'], row['pos_revenue'], row['price']
                 
                 status = ""
-                if o_qty > 0 and a_qty == 0:
-                    status = "(⏸️ 臨時取消出餐)"
-                elif a_qty > o_qty and p_qty >= o_qty:
-                    status = "(🔥 現場緊急追加)"
-                elif a_qty > p_qty:
-                    status = f"(⚠️ 報廢 {a_qty - p_qty} 份)"
-                elif a_qty < p_qty:
-                    status = f"(🚨 缺貨/超賣 {p_qty - a_qty} 份)"
-                else:
-                    status = "(✅ 完銷相符)"
+                if o_qty > 0 and a_qty == 0: status = "(⏸️ 臨時取消出餐)"
+                elif a_qty > o_qty and p_qty >= o_qty: status = "(🔥 現場緊急追加)"
+                elif a_qty > p_qty: status = f"(⚠️ 報廢 {a_qty - p_qty} 份)"
+                elif a_qty < p_qty: status = f"(🚨 缺貨/超賣 {p_qty - a_qty} 份)"
+                else: status = "(✅ 完銷相符)"
                     
                 discount_status = ""
                 if p_qty > 0 and price > 0:
                     full_price_revenue = p_qty * price
                     if p_rev < full_price_revenue * 0.95:
-                        discount_rate = int((p_rev / full_price_revenue) * 10)
-                        discount_status = f" [📉打折出清,平均約{discount_rate}折]"
+                        discount_status = f" [📉打折出清,約{int((p_rev / full_price_revenue) * 10)}折]"
                     
                 report_text += f"   - {d_str}(週{wd_str}): 預估 {o_qty}, 實際 {a_qty}, POS賣出 {p_qty} {status}{discount_status}\n"
-        
-        report_text += "\n【過去 30 天各區總產能與總銷量參考 (用以控制建議總數)】：\n"
-        daily_summary = history_df.groupby('date').agg(總實際出餐=('actual_qty', 'sum'), 總POS銷售=('pos_qty', 'sum')).reset_index()
-        for _, row in daily_summary.iterrows():
-            d_str = row['date']
-            d_obj = datetime.strptime(d_str, "%Y-%m-%d")
-            wd_str = weekdays_tw[d_obj.weekday()]
-            report_text += f"📅 {d_str}(週{wd_str}) 總出餐: {row['總實際出餐']} 份 | 總POS銷售: {row['總POS銷售']} 份\n"
-
         return report_text
     except Exception as e:
         return f"調閱歷史資料失敗：{e}"
@@ -176,31 +139,25 @@ def get_current_plans(dept_name):
         today_str = tw_now.strftime("%Y-%m-%d")
         tomorrow_str = (tw_now + timedelta(days=1)).strftime("%Y-%m-%d")
         
-        if dept_name == "總管理處":
-            target_df = df[df['date'].isin([today_str, tomorrow_str])].copy()
-        else:
-            target_df = df[(df['cat'] == dept_name) & (df['date'].isin([today_str, tomorrow_str]))].copy()
-            
+        target_df = df[df['date'].isin([today_str, tomorrow_str])].copy() if dept_name == "總管理處" else df[(df['cat'] == dept_name) & (df['date'].isin([today_str, tomorrow_str]))].copy()
         target_df['ordered_qty'] = pd.to_numeric(target_df['ordered_qty'], errors='coerce').fillna(0)
         target_df = target_df[target_df['ordered_qty'] > 0]
         
-        if target_df.empty: return "目前資料庫中尚未填寫今日或明日的預估出餐數量。"
+        if target_df.empty: return "目前尚未填寫今日或明日的預估。"
         
         report = "【目前資料庫中已建檔的出餐計畫】：\n"
         for d_str in [today_str, tomorrow_str]:
             day_df = target_df[target_df['date'] == d_str]
             if not day_df.empty:
-                day_label = "今日" if d_str == today_str else "明日"
-                report += f"\n📅 {day_label} ({d_str}) 的預估出餐表：\n"
+                report += f"\n📅 {'今日' if d_str == today_str else '明日'} ({d_str}) 的預估出餐表：\n"
                 for _, r in day_df.iterrows():
                     cat_prefix = f"[{r['cat']}] " if dept_name == "總管理處" else ""
                     report += f"- {cat_prefix}{r['name']}: 預計製作 {int(r['ordered_qty'])} 份\n"
         return report
-    except Exception:
-        return ""
+    except: return ""
 
 def render_ai_assistant(dept_name, display_df):
-    if not init_ai():
+    if not check_ai_key():
         st.info("🤖 AI 數據顧問正在休假中 (尚未設定有效金鑰)。")
         return
 
@@ -213,23 +170,23 @@ def render_ai_assistant(dept_name, display_df):
     
     if dept_name == "總管理處":
         st.markdown(f"#### 👑 阿布潘老闆-專屬AI助手")
-        st.markdown(f"<p style='font-size:12px; color:#888;'>💡 擁有全公司最高讀取權限！(本次登入剩餘額度: <span style='color:#f37021;font-weight:bold;'>{remaining_quota}</span> 次)</p>", unsafe_allow_html=True)
-        placeholder_text = "例：最近適合做活動嗎？並給出調整建議。"
+        st.markdown(f"<p style='font-size:12px; color:#888;'>💡 全公司最高權限！內建決策框架，依據可信數據給予營運建議。(剩餘額度: <span style='color:#f37021;font-weight:bold;'>{remaining_quota}</span> 次)</p>", unsafe_allow_html=True)
+        placeholder_text = "例：幫我分析各部門明日備料是否合理？"
     else:
-        st.markdown(f"#### 🤖 {dept_name}部 - AI 首席資料分析師 ")
-        st.markdown(f"<p style='font-size:12px; color:#888;'>💡 自動調閱過去 30 天歷史紀錄，給予備料建議！(剩餘額度: <span style='color:#f37021;font-weight:bold;'>{remaining_quota}</span> 次)</p>", unsafe_allow_html=True)
-        placeholder_text = "例：幫我預估明天的出餐量？"
+        st.markdown(f"#### 🤖 {dept_name}部 - AI 營運決策大腦")
+        st.markdown(f"<p style='font-size:12px; color:#888;'>💡 內建思維決策鏈，嚴格控制報廢率並優化備料建議！(剩餘額度: <span style='color:#f37021;font-weight:bold;'>{remaining_quota}</span> 次)</p>", unsafe_allow_html=True)
+        placeholder_text = "例：依據決策框架，建議明天熱銷品該備多少量？"
 
     with st.container(border=True):
         for msg in st.session_state.ai_chat_history:
             if msg["role"] == "user" and "【隱藏系統資料】" in msg["content"]:
-                display_text = msg["content"].split("【使用者提問】\n")[-1]
+                display_text = msg["content"].split("【使用者實際提問】\n")[-1]
                 with st.chat_message("user"): st.markdown(display_text)
             else:
                 with st.chat_message(msg["role"]): st.markdown(msg["content"])
 
         if st.session_state.ai_query_count >= 5:
-            st.warning("✋ 您本次的 AI 詢問額度已達上限。若需繼續提問，請重整網頁 (F5)！")
+            st.warning("✋ 本次 AI 詢問額度已達上限，請重整網頁 (F5)！")
             return
 
         prompt = st.chat_input(placeholder_text)
@@ -248,62 +205,114 @@ def render_ai_assistant(dept_name, display_df):
                 menu_info += f"- {cat_prefix}{row['name']} (單價: {item_price}元)\n"
 
             with st.chat_message("assistant"):
-                with st.spinner("🤖 思考回覆中 ..."):
+                with st.spinner("🤖 套用 Prompt V3 企業決策框架思考中 ..."):
                     try:
                         weather_info = ""
                         weather_keywords = ["天氣", "下雨", "氣象", "雨", "晴", "颱風", "預估", "備料", "建議", "安排", "明天"]
                         if any(kw in prompt for kw in weather_keywords):
-                            weather_data = get_tomorrow_weather()
-                            
-                            if "ERROR" in weather_data or "異常" in weather_data:
-                                get_tomorrow_weather.clear() 
-                                weather_info = f"\n【⚠️ 系統警告：氣象署連線失敗，請僅依照歷史數據給予建議】\n"
-                            elif weather_data:
-                                weather_info = f"\n【☁️ 系統自動擷取之氣象署 明日預報】\n{weather_data}\n"
+                            w_data = get_tomorrow_weather()
+                            if isinstance(w_data, dict) and w_data.get("status") == "success":
+                                weather_info = f"""
+                                【天氣資料即時庫】
+                                以下資訊來自中央氣象署，不可自行猜測修改。
+                                地點：{w_data['location']} | 日期：{w_data['date']}
+                                ☀️ 白天天氣：{w_data['day']['weather']} | 降雨機率：{w_data['day']['pop']}% | 溫度：{w_data['day']['temp']}℃
+                                🌙 晚上天氣：{w_data['night']['weather']} | 降雨機率：{w_data['night']['pop']}% | 溫度：{w_data['night']['temp']}℃
+                                """
+                            else:
+                                weather_info = f"\n【系統警告：中央氣象署目前無法取得資料，請不要自行猜測天氣，僅依據歷史數據分析】\n"
 
                         history_report = get_recent_history_report(dept_name)
                         current_plan_report = get_current_plans(dept_name)
                         
+                        # ==========================================
+                        # 🌟 核心升級：Prompt V3 (企業營運長決策架構)
+                        # ==========================================
                         if dept_name == "總管理處":
-                            system_instruction = f"""
-                            你現在是阿布潘水產的【總管理處首席 AI 營運戰略幕僚】。今天是 {tw_now_str}，明天是 {tomorrow_wd}。
-                            【最高權限解鎖】：擁有跨部門最高分析權限。回答須具備「老闆視角」，以提升毛利、降低報廢為主。絕對禁止回答政治、寫程式等與阿布潘水產無關的話題。
-                            """
+                            role_prompt = f"你現在是阿布潘水產的【總管理處首席 AI 營運戰略幕僚】。今天是 {tw_now_str}，明天是 {tomorrow_wd}。"
                         else:
-                            system_instruction = f"""
-                            你現在是阿布潘水產【{dept_name}部】的首席 AI 資料分析師。今天是 {tw_now_str}，明天是 {tomorrow_wd}。
-                            【安全隔離限制】：只能處理【{dept_name}部】業務。嚴禁跨部門回答。絕對禁止回答無關話題。
-                            """
+                            role_prompt = f"你現在是阿布潘水產【{dept_name}部】的首席 AI 營運長。今天是 {tw_now_str}，明天是 {tomorrow_wd}。只能處理本部門業務。"
 
-                        system_instruction += f"""
-                        【今日全商品庫 (僅提供商品與最新單價)】：\n{menu_info}
-                        【⚠️ 過去 30 天每日真實營運數據】：\n{history_report}
+                        system_instruction = f"""
+                        {role_prompt}
+                        
+                        【企業營運目標與決策優先級】
+                        你的職責是：協助阿布潘水產降低報廢率、提高商品周轉率、提升毛利。
+                        在給出備料建議時，必須【嚴格遵守】以下決策優先順序：
+                        第一：避免重大缺貨造成營業損失 (守住基本盤)
+                        第二：嚴格控制報廢率 (控制耗損)
+                        第三：提高銷售機會
+                        第四：追求合理最大營業額 (【嚴禁】為了衝高營業額而盲目建議爆量備料，禁止只追求銷售最大化)
 
-                        【你的專業分析任務指南 (極度重要，請嚴格遵守)】：
-                        1. 【基線確立 - 尋找同星期的規律】：當你給出明天({tomorrow_wd})的備料建議時，必須自己去數據庫找出過去 4 週內所有的 {tomorrow_wd}，算出它們的平均 POS 銷量，當作你的基準線！
-                        2. 【總產能天花板限制】：你在給出備料建議時，必須參考報表下方的「過去 30 天各區總產能與總銷量參考」。你的「建議總數量」絕對不可以無故大幅超過「歷史同星期」的各區總出餐量。
-                        3. 【現場動態決策微調】：狀態為(🔥 現場緊急追加)建議提高備料；狀態為(⏸️ 臨時取消出餐)不扣減銷量評估；狀態為(⚠️ 報廢)需下調備料。
-                        4. 🌟【打折標籤認知與毛利保護】：若頻繁出現「📉打折出清」，代表原價買氣不足，請警告使用者控制報廢以保住毛利。
-                        5. 若有【天氣預報】，請務必納入考量（如下雨調降，晴朗調升）。
-                        6. 若要求計算營業額，務必將建議數量乘上單價加總。
-                        7. 所有資料與回答必須有憑有據，不可產生幻覺
+                        【資料可信度排序】
+                        請依照以下權重判斷真實狀況，若資料矛盾，以高權重為主：
+                        最高：POS實際銷售 (市場真實需求)
+                        第二：實際出餐數 (廚房真實產能)
+                        第三：預估出餐數 (人為預期)
+
+                        【時間衰減原則 (Time Decay Weighting)】
+                        分析歷史資料時，請賦予不同時間點不同的權重：
+                        - 最近 7 天：權重最高 (反映最新市場脈動)
+                        - 8~21 天：次之 (近期平穩趨勢)
+                        - 22~30 天：作為長期參考
+                        絕對不可單純將 30 天的資料做算術平均！
+
+                        【商品生命週期判斷】
+                        給出建議前，請先在背景判斷該商品屬於何種型態：
+                        A. 穩定熱銷品：銷量穩定，可提高備料信心。
+                        B. 波動商品：每日差異大，建議保守。
+                        C. 滯銷商品：長期下降或頻繁出現「📉打折出清」，必須大幅降低備料以保住毛利。
+                        D. 新商品：歷史紀錄不足，不可過度推估。
+
+                        【決策分析框架】
+                        回答時，請【直接輸出分析結果】，不需要展示內部推理過程。請依循以下維度：
+                        1. 歷史銷售基準 (比較過去同星期銷售，套用時間衰減)
+                        2. 市場需求變化 (判斷近期成長或衰退)
+                        3. 庫存風險 (評估缺貨與報廢風險)
+                        4. 外部因素 (天氣降雨機率)
+                        5. 毛利影響 (避免低效率打折備貨)
+
+                        【決策獨立性與風險控制】
+                        1. 不可因使用者期待某答案而修改數據。若使用者希望大幅增加備料，但資料顯示風險高(如：近期常報廢、明天下大雨)，你必須【明確提出反對意見】。
+                        2. 任何增加備料的建議，【正常情況下不得超過近期同星期平均銷量的 20%】。除非遇特殊事件或近期連續嚴重缺貨，才允許突破限制，但必須說明原因。
+
+                        【系統資料庫】
+                        全商品庫：\n{menu_info}
+                        過去 30 天營運數據：\n{history_report}
+
+                        【強制輸出格式】
+                        當給予特定商品建議時，請嚴格套用以下格式回覆：
+                        ---
+                        🔸 【分析商品】：(商品名稱)
+                        📊 【歷史基準】：(說明同星期平均、近期趨勢與商品生命週期)
+                        ☁️ 【天氣影響】：(說明降雨或天氣對此商品的預估影響幅度)
+                        🎯 【AI 建議量】：XX 份 (預估總營收: NT$ XX)
+                        💪 【預測信心】：XX%
+                        ⚠️ 【風險與獨立見解】：(說明主要風險，若強烈反對使用者的提議請寫在此)
+                        ---
+
+                        【系統資料交換格式 (極度重要)】
+                        若你有提供任何商品的「建議數量」，在整個回答的【最底部】，必須輸出一段 JSON 格式資料供 Python 系統抓取，並用 <AI_DATA> 與 </AI_DATA> 標籤包起來。
+                        格式如下 (必須為有效 JSON Array)：
+                        <AI_DATA>
+                        [
+                          {{"product": "商品名稱", "prediction": 建議數量(整數), "confidence": 信心分數(整數,不含%), "weather_factor": "positive/negative/neutral", "risk": "low/medium/high"}}
+                        ]
+                        </AI_DATA>
                         """
 
-                        # 🌟 呼叫已快取的 AI Client！
-                        client = get_ai_client()
-                        if not client:
-                            st.error("❌ AI 客戶端連線失敗，請檢查 API Key。")
-                            return
-                            
+                        client = genai.Client(api_key=st.secrets["gemini_api_key"])
                         config = types.GenerateContentConfig(system_instruction=system_instruction)
                         
-                        hidden_context = f"【隱藏系統資料】\n{weather_info}\n{current_plan_report}\n【使用者提問】\n"
+                        hidden_context = f"【隱藏系統資料】\n{weather_info}\n{current_plan_report}\n【使用者實際提問】\n"
                         full_prompt = hidden_context + prompt
 
                         formatted_history = []
                         for m in st.session_state.ai_chat_history:
                             role = "user" if m["role"] == "user" else "model"
-                            formatted_history.append(types.Content(role=role, parts=[types.Part.from_text(text=m["content"])]))
+                            formatted_history.append(
+                                types.Content(role=role, parts=[types.Part.from_text(text=m["content"])])
+                            )
                             
                         chat = client.chats.create(model='gemini-2.5-flash', config=config, history=formatted_history)
                         response = chat.send_message(full_prompt)
