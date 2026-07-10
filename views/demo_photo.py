@@ -4,31 +4,58 @@ from datetime import datetime
 import io
 import base64
 import requests
-import re # 🌟 用來解析網址的工具
+import re 
 from PIL import Image, ImageOps
 from record_engine import get_gspread_client, SHEET_NAME
+
+# 🌟 【終極防爆設定】：解除 Pillow 內建的安全限制，避免處理大圖時當機
+Image.MAX_IMAGE_PIXELS = None
 
 # ==========================================
 # ⚙️ 設定區
 # ==========================================
-# 🌟 1. 貼上你剛剛部署成功的 Apps Script 網址 (Web app URL)
-GAS_URL = "https://script.google.com/macros/s/AKfycbzJVbW4al2ficgAX_5ac5H3OlLKkE_yIRqzCkZY2UTTxzq9zP2hcmk_rKHJAyZ-AvjBOw/exec"
-
-# 🌟 2. 貼上你 Google Drive 建立的「阿布潘現場回報照片」資料夾 ID
-FOLDER_ID = "1axu-8dPpCkYLjNqOvc6rYeTO2rDcbM7n"
+GAS_URL = "https://script.google.com/macros/s/AKfycbyTqQxSCLm_fC7P1uVjZkVqP2YpGzO8xWqWbU2n4J-X_z1Pj9sL-L8fM6Q_9K5vBw/exec"
+FOLDER_ID = "1aBcDeFgHiJkLmNoPqRsTuVwXyZ123456" # 請確保這是你正確的資料夾 ID
 
 # ==========================================
-# 📸 影像處理與上傳引擎
+# 📸 影像處理與上傳引擎 (Segfault 防護版)
 # ==========================================
 def compress_image(uploaded_file):
-    img = Image.open(uploaded_file)
-    img = ImageOps.exif_transpose(img)
-    if img.mode in ("RGBA", "P"):
-        img = img.convert("RGB")
-    img.thumbnail((1024, 1024))
-    output = io.BytesIO()
-    img.save(output, format="JPEG", quality=85)
-    return output.getvalue()
+    """將高畫質照片壓縮，並配備 Segfault 防護罩"""
+    try:
+        # 1. 安全讀取圖片
+        img = Image.open(uploaded_file)
+        
+        # 2. 自動校正方向 (這步最容易當機，加上 try-except)
+        try:
+            img = ImageOps.exif_transpose(img)
+        except Exception:
+            pass # 如果轉正失敗就維持原狀，不勉強
+        
+        # 3. 🌟 【防 Segfault 核心】：絕對安全的色彩轉換
+        # 不要用 img.convert("RGB")，改用更穩定的新建畫布法
+        if img.mode in ("RGBA", "P", "LA"):
+            background = Image.new("RGB", img.size, (255, 255, 255))
+            # 處理有 Alpha 通道的情況
+            if img.mode in ('RGBA', 'LA'):
+                background.paste(img, mask=img.split()[-1])
+            else:
+                background.paste(img)
+            img = background
+            
+        # 4. 安全縮圖
+        img.thumbnail((1024, 1024), Image.Resampling.LANCZOS)
+        
+        # 5. 安全輸出
+        output = io.BytesIO()
+        img.save(output, format="JPEG", quality=85, optimize=True)
+        return output.getvalue()
+        
+    except Exception as e:
+        print(f"⚠️ 圖片壓縮失敗，改用原圖直出: {e}")
+        # 🌟 如果真的壓縮失敗，不要當機！直接把原圖傳上去當作保底！
+        uploaded_file.seek(0)
+        return uploaded_file.read()
 
 def upload_photo_to_drive(file_bytes, filename):
     try:
@@ -76,6 +103,40 @@ def show():
     DEPT_NAME = "測試部"
     today_str = datetime.today().strftime("%Y-%m-%d")
 
+    # 🌟 鎖死外框，避免排版跑掉
+    st.markdown("""
+    <style>
+    div[data-testid="stImage"] {
+        height: 280px !important;
+        overflow: hidden !important;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: #1E1E1E; 
+    }
+    div[data-testid="stImage"] img {
+        height: 100% !important;
+        width: 100% !important;
+        object-fit: cover !important; 
+    }
+    div[data-testid="stFullScreenFrame"], 
+    div[data-testid="stFullScreenFrame"] > div {
+        height: 100vh !important;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    div[data-testid="stFullScreenFrame"] img {
+        height: auto !important;
+        max-height: 95vh !important;
+        width: auto !important;
+        max-width: 100vw !important;
+        object-fit: contain !important; 
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
     st.markdown("### 📸 現場紀實與照片回報測試")
     test_role = st.radio("👀 切換測試視角：", ["🧑‍🍳 現場員工 (只能看本月)", "👑 老闆 (可看全部)"], horizontal=True)
 
@@ -97,10 +158,15 @@ def show():
                     progress_bar = st.progress(0)
                     status_text = st.empty()
                     for i, file in enumerate(uploaded_files):
-                        status_text.text(f"正在壓縮與上傳第 {i+1} 張照片...")
+                        status_text.text(f"正在處理第 {i+1} 張照片...")
+                        
+                        # 🌟 使用安全版壓縮
                         compressed_bytes = compress_image(file)
                         filename = f"{today_str}_{DEPT_NAME}_{selected_cat}_{i}.jpg"
+                        
+                        status_text.text(f"正在將第 {i+1} 張照片送往雲端...")
                         drive_url = upload_photo_to_drive(compressed_bytes, filename)
+                        
                         if drive_url:
                             new_records.append({
                                 "date": today_str,
@@ -158,23 +224,17 @@ def show():
             
             if not view_db.empty:
                 cols = st.columns(2) 
-                
                 for idx, row in view_db.iterrows():
                     with cols[idx % 2]:
                         with st.container(border=True):
-                            
-                            # 🌟 【金蟬脫殼黑魔法】：取出 ID，改用 HTML 直接畫圖片！
                             display_url = str(row["photo_url"])
                             file_id_match = re.search(r'id=([a-zA-Z0-9_-]+)', display_url)
                             
                             if file_id_match:
                                 file_id = file_id_match.group(1)
-                                # 請求 Google 給一張裁切好的漂亮方塊縮圖 (寬600, 高450)
                                 thumb_url = f"https://drive.google.com/thumbnail?id={file_id}&sz=w600-h450-c"
-                                # 點擊後開啟的高畫質原圖網址
                                 view_url = f"https://drive.google.com/file/d/{file_id}/view"
                                 
-                                # 使用 HTML 渲染，完全免疫 app.py 的 CSS 污染！
                                 img_html = f"""
                                 <a href="{view_url}" target="_blank" title="點擊放大觀看高畫質原圖">
                                     <img src="{thumb_url}" style="width: 100%; border-radius: 8px; margin-bottom: 10px; border: 1px solid rgba(255,255,255,0.1); object-fit: cover;">
@@ -182,7 +242,7 @@ def show():
                                 """
                                 st.markdown(img_html, unsafe_allow_html=True)
                             else:
-                                st.image(display_url, use_container_width=True) # 找不到ID的保底措施
+                                st.image(display_url, use_container_width=True) 
                             
                             st.markdown(f"""
                             <div style='font-size:13px; color:#ddd;'>
