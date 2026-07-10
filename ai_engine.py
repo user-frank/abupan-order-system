@@ -3,6 +3,8 @@ import pandas as pd
 from datetime import datetime, timedelta, timezone
 import requests
 import urllib3
+import re
+
 
 # 🌟 徹底拔除舊版，只保留 Google 最新的官方 AI 套件
 from google import genai
@@ -34,7 +36,7 @@ def get_tomorrow_weather(city_name="臺中市", district_name="北屯區"):
     params = {"Authorization": CWA_API_KEY, "locationName": district_name, "format": "JSON"}
     
     try:
-        response = requests.get(url, params=params, timeout=5, verify=False)
+        response = requests.get(url, params=params, timeout=10, verify=False)
         response.raise_for_status()
         
         tw_now = datetime.now(TW_TZ)
@@ -205,7 +207,7 @@ def render_ai_assistant(dept_name, display_df):
                 menu_info += f"- {cat_prefix}{row['name']} (單價: {item_price}元)\n"
 
             with st.chat_message("assistant"):
-                with st.spinner("🤖 套用 Prompt V3 企業決策框架思考中 ..."):
+                with st.spinner("🤖 套用 Prompt 企業決策框架模型思考中 ..."):
                     try:
                         weather_info = ""
                         weather_keywords = ["天氣", "下雨", "氣象", "雨", "晴", "颱風", "預估", "備料", "建議", "安排", "明天"]
@@ -279,7 +281,7 @@ def render_ai_assistant(dept_name, display_df):
                         過去 30 天營運數據：\n{history_report}
 
                         【強制輸出格式】
-                        當給予特定商品建議時，請嚴格套用以下格式回覆：
+                        當給予特定商品建議時，請嚴格套用以下格式回覆（務必維持換行與條列排版，請勿把所有文字擠在同一行）：
                         ---
                         🔸 【分析商品】：(商品名稱)
                         📊 【歷史基準】：(說明同星期平均、近期趨勢與商品生命週期)
@@ -321,10 +323,29 @@ def render_ai_assistant(dept_name, display_df):
                             chat = client.chats.create(model='gemini-1.5-flash', config=config, history=formatted_history)
                             response = chat.send_message(full_prompt)
                         
-                        st.markdown(response.text)
+                        # 🌟 新增過濾邏輯：把給使用者的文字，和給系統的 JSON 分開
+                        raw_text = response.text
                         
+                        # 使用正規表達式找尋 <AI_DATA> 標籤
+                        ai_data_match = re.search(r"<AI_DATA>(.*?)</AI_DATA>", raw_text, re.DOTALL)
+                        
+                        if ai_data_match:
+                            # 如果有找到標籤，把標籤整段從要顯示的文字中清掉
+                            display_text = re.sub(r"<AI_DATA>.*?</AI_DATA>", "", raw_text, flags=re.DOTALL).strip()
+                            
+                            # 💡 你可以在這裡拿 json_string 去寫入資料庫，目前先把它隱藏
+                            # json_string = ai_data_match.group(1).strip() 
+                        else:
+                            # 如果沒找到，就照常顯示
+                            display_text = raw_text
+
+                        # 只顯示乾淨的文字給使用者看
+                        st.markdown(display_text)
+                        
+                        # 對話紀錄也只存入乾淨的文字，避免未來干擾 AI 判斷
                         st.session_state.ai_chat_history.append({"role": "user", "content": full_prompt})
-                        st.session_state.ai_chat_history.append({"role": "assistant", "content": response.text})
+                        st.session_state.ai_chat_history.append({"role": "assistant", "content": display_text})
+                        
                         st.session_state.ai_query_count += 1
                         st.rerun()
                         
