@@ -44,7 +44,7 @@ def show():
     
     df, _ = load_sales_data()
     if df.empty:
-        st.warning("⚠️ 無法讀取 ERP 商品資料。")
+        st.warning("⚠️ 無法讀取 商品資料。")
         return
         
     sushi_df = df[df['cat'].str.contains('壽司|熟食|拉沙|沙拉', na=False)].copy()
@@ -165,7 +165,7 @@ def show():
                 st.rerun()
 
             st.divider()
-            st.markdown("#### 3️⃣ 新增「ERP 尚未建檔」的新產品")
+            st.markdown("#### 3️⃣ 新增新產品")
             col_id, col_name, col_btn = st.columns([2, 4, 2])
             with col_id: new_c_id = st.text_input("自訂編號 (選填)", key="sushi_new_c_id")
             with col_name: new_c_name = st.text_input("商品名稱 (必填)", key="sushi_new_c_name")
@@ -391,7 +391,7 @@ def show():
                 if actual_updates:
                     batch_update_record_qty(date_str, actual_updates, current_user, current_time)
                 
-                msg = f"🍣 【阿布潘-壽司部】 🍣\n🗓️ 日期：{report_date_display}\n👨‍💻 回報人員：{current_user}\n──────────────────\n📋 【本日實際出餐數量】\n"
+                msg = f"🍣 【阿布潘-壽司部】 🍣\n🗓️ 日期：{report_date_display}\n👨‍💻 人員：{current_user}\n──────────────────\n📋 【本日實際出餐數量】\n"
                 total_o_qty = 0
                 total_a_qty = 0
                 
@@ -450,8 +450,8 @@ def show():
     # 🌟 分頁 3：原料庫存與待銷品追蹤 (全新雙區塊)
     # ==========================================
     with tab_stock:
-        st.markdown("#### 📦 部門庫存與待銷追蹤")
-        st.markdown("<p style='font-size:13px; color:#888;'>此清單庫存由 ERP 系統定時自動更新。您可以將原料分為「核心原料」或「待銷品」以利現場管理。</p>", unsafe_allow_html=True)
+        st.markdown("#### 📦 核心原料庫存")
+        st.markdown("<p style='font-size:13px; color:#888;'>此清單庫存由系統定時自動更新。您可以將原料分為「核心原料」或「待銷品」以利現場管理。</p>", unsafe_allow_html=True)
         
         stock_list = load_inventory_tracking(DEPT_NAME)
         
@@ -489,9 +489,9 @@ def show():
                     st.markdown('</div>', unsafe_allow_html=True)
 
         st.divider()
-        with st.expander("➕ 新增要追蹤的 ERP 原料"):
+        with st.expander("➕ 新增要追蹤的商品"):
             col_id, col_name = st.columns(2)
-            with col_id: new_s_id = st.text_input("ERP 原料編號 (必填)", key="stock_new_id")
+            with col_id: new_s_id = st.text_input("原料編號 (必填)", key="stock_new_id")
             with col_name: new_s_name = st.text_input("原料名稱 (必填)", key="stock_new_name")
             
             # 🌟 新增分類選擇鈕
@@ -508,11 +508,11 @@ def show():
                     stock_list.append({
                         "item_id": new_s_id.strip(),
                         "name": new_s_name.strip(),
-                        "qty": "等待 ERP 同步...",
+                        "qty": "等待系統同步...",
                         "unit": "",
                         "time": "尚未更新",
                         "stock_cat": new_s_cat # 🌟 寫入分類
                     })
                     save_inventory_tracking(DEPT_NAME, stock_list)
-                    st.success(f"✅ 加入成功！下次 ERP 同步時將抓取 {new_s_cat} 庫存。")
+                    st.success(f"✅ 加入成功！下次 系統 同步時將抓取 {new_s_cat} 庫存。")
                     st.rerun()
