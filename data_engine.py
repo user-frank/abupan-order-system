@@ -2,7 +2,7 @@ import pandas as pd
 import os
 import streamlit as st
 import time
-from datetime import datetime, timedelta, timezone # 🌟 新增時間模組
+from datetime import datetime, timedelta, timezone 
 from record_engine import get_worksheet, _get_cloud_dataframe
 
 IMAGE_BASE_DIR = "product_images"
@@ -127,31 +127,41 @@ def load_sales_data():
         final_df = pd.DataFrame(columns=['item_id', 'name', 'cat', 'price'])
         
     # ==========================================
-    # 🌟 雲端自動學習定價：防護時空悖論版
+    # 🌟 雲端自動學習定價：雙重過濾 POS 真實價格版
     # ==========================================
     try:
         sheet = get_worksheet()
         if sheet:
             cloud_df = _get_cloud_dataframe(sheet)
             if not cloud_df.empty and 'price' in cloud_df.columns:
-                valid_price_df = cloud_df[pd.to_numeric(cloud_df['price'], errors='coerce') > 0].copy()
+                # 確保數字型態
+                cloud_df['price'] = pd.to_numeric(cloud_df['price'], errors='coerce').fillna(0)
+                cloud_df['pos_qty'] = pd.to_numeric(cloud_df['pos_qty'], errors='coerce').fillna(0)
                 
-                if not valid_price_df.empty:
-                    # 🌟【終極修復】：絕對不可以拿「未來日期」來學習定價！
-                    TW_TZ = timezone(timedelta(hours=8))
-                    today_str = datetime.now(TW_TZ).strftime("%Y-%m-%d")
-                    # 只篩選出日期小於等於「今天」的紀錄
-                    valid_price_df = valid_price_df[valid_price_df['date'] <= today_str]
+                TW_TZ = timezone(timedelta(hours=8))
+                today_str = datetime.now(TW_TZ).strftime("%Y-%m-%d")
+                
+                # 只看今天以前的資料，避免未來時空錯亂
+                past_df = cloud_df[cloud_df['date'] <= today_str].copy()
+                
+                if not past_df.empty:
+                    past_df['clean_id'] = past_df['item_id'].astype(str).str.split('_').str[0].str.replace(r'\.0$', '', regex=True)
+                    past_df = past_df.sort_values(by='date', ascending=True)
                     
-                    if not valid_price_df.empty:
-                        valid_price_df = valid_price_df.sort_values(by='date', ascending=True)
-                        valid_price_df['clean_id'] = valid_price_df['item_id'].astype(str).str.split('_').str[0].str.replace(r'\.0$', '', regex=True)
-                        latest_prices = valid_price_df.groupby('clean_id')['price'].last().to_dict()
-                        
-                        final_df['price'] = final_df.apply(
-                            lambda row: latest_prices.get(str(row['item_id']), row.get('price', 0)), 
-                            axis=1
-                        )
+                    # 1. 預設底線：抓取所有大於 0 元的最新價格 (包含員工提早預排的訂單)
+                    base_price_df = past_df[past_df['price'] > 0]
+                    latest_prices = base_price_df.groupby('clean_id')['price'].last().to_dict() if not base_price_df.empty else {}
+                    
+                    # 2. 🌟 終極覆寫：只要 POS 有實際賣過 (pos_qty > 0)，就拿 POS 傳來的那天當作絕對正確的價格！
+                    pos_price_df = past_df[past_df['pos_qty'] > 0]
+                    if not pos_price_df.empty:
+                        pos_latest_prices = pos_price_df.groupby('clean_id')['price'].last().to_dict()
+                        latest_prices.update(pos_latest_prices) # 覆蓋進去！
+                    
+                    final_df['price'] = final_df.apply(
+                        lambda row: latest_prices.get(str(row['item_id']), row.get('price', 0)), 
+                        axis=1
+                    )
     except Exception as e:
         print(f"定價學習失敗: {e}")
         pass
