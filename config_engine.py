@@ -156,12 +156,13 @@ def save_subcategories(dept_name, subcat_dict):
         return False
 
 # ==========================================
-# 4. 📦 原料庫存追蹤清單存取
+# 4. 📦 原料庫存追蹤清單存取 (支援待銷品分類)
 # ==========================================
 @st.cache_data(ttl=30, show_spinner=False)
 def load_inventory_tracking(dept_name):
     """讀取該部門要追蹤的原料清單與最新庫存"""
-    headers = ["部門", "item_id", "品名", "庫存量", "單位", "更新時間"]
+    # 🌟 新增「庫存分類」欄位
+    headers = ["部門", "item_id", "品名", "庫存量", "單位", "更新時間", "庫存分類"] 
     sheet = _get_worksheet("設定_庫存追蹤", headers)
     if not sheet: return []
     try:
@@ -169,20 +170,24 @@ def load_inventory_tracking(dept_name):
         if df.empty: return []
         dept_df = df[df["部門"] == dept_name].copy()
         
-        # 🌟 核心修復：將 Google Sheets 的中文標題，翻譯回 Python 認得的英文 Key！
+        # 向後相容：如果舊資料沒有分類，自動預設為核心原料
+        if "庫存分類" not in dept_df.columns:
+            dept_df["庫存分類"] = "核心原料"
+            
         dept_df = dept_df.rename(columns={
             "品名": "name",
             "庫存量": "qty",
             "單位": "unit",
-            "更新時間": "time"
+            "更新時間": "time",
+            "庫存分類": "stock_cat" # 🌟 轉譯給 Python 認得
         })
         return dept_df.to_dict('records')
     except:
         return []
 
 def save_inventory_tracking(dept_name, items):
-    """儲存該部門的庫存追蹤清單 (支援新增與刪除)"""
-    headers = ["部門", "item_id", "品名", "庫存量", "單位", "更新時間"]
+    """儲存該部門的庫存追蹤清單"""
+    headers = ["部門", "item_id", "品名", "庫存量", "單位", "更新時間", "庫存分類"]
     sheet = _get_worksheet("設定_庫存追蹤", headers)
     if not sheet: return False
     try:
@@ -190,7 +195,16 @@ def save_inventory_tracking(dept_name, items):
         if not df.empty and "部門" in df.columns:
             df = df[df["部門"] != dept_name]
             
-        new_rows = [{"部門": dept_name, "item_id": str(i["item_id"]), "品名": str(i.get("name", "")), "庫存量": str(i.get("qty", 0)), "單位": str(i.get("unit", "")), "更新時間": str(i.get("time", "未更新"))} for i in items]
+        new_rows = [{
+            "部門": dept_name, 
+            "item_id": str(i["item_id"]), 
+            "品名": str(i.get("name", "")), 
+            "庫存量": str(i.get("qty", 0)), 
+            "單位": str(i.get("unit", "")), 
+            "更新時間": str(i.get("time", "未更新")),
+            "庫存分類": str(i.get("stock_cat", "核心原料")) # 🌟 存入雲端
+        } for i in items]
+        
         if new_rows:
             if df.empty: df = pd.DataFrame(new_rows)
             else: df = pd.concat([df, pd.DataFrame(new_rows)], ignore_index=True)
