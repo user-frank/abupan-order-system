@@ -4,8 +4,8 @@ from datetime import datetime, timedelta, timezone
 import requests
 import urllib3
 
-# 🌟 導入 Google 最新的官方 AI 套件
-import google.generativeai as genai
+# 🌟 徹底拔除舊版，只保留 Google 最新的官方 AI 套件
+from google import genai
 from google.genai import types
 
 # 關閉 SSL 憑證警告
@@ -88,7 +88,7 @@ def get_recent_history_report(dept_name):
         else:
             history_df = df[(df['cat'] == dept_name) & (df['date'].isin(past_days))].copy()
         
-        if history_df.empty: return "過去 30 天內尚無營業紀錄可供分析。"
+        if history_df.empty: return "過去近期尚無營業紀錄可供分析。"
         
         for col in ['ordered_qty', 'actual_qty', 'pos_qty', 'pos_revenue', 'price']:
             history_df[col] = pd.to_numeric(history_df.get(col, 0), errors='coerce').fillna(0).astype(int)
@@ -170,7 +170,7 @@ def render_ai_assistant(dept_name, display_df):
     
     if dept_name == "總管理處":
         st.markdown(f"#### 👑 阿布潘老闆-專屬AI助手")
-        st.markdown(f"<p style='font-size:12px; color:#888;'>💡 全公司最高權限！內建決策框架，依據可信數據給予營運建議。(剩餘額度: <span style='color:#f37021;font-weight:bold;'>{remaining_quota}</span> 次)</p>", unsafe_allow_html=True)
+        st.markdown(f"<p style='font-size:12px; color:#888;'>💡 擁有全公司最高讀取權限！支援跨部門營運分析與戰略建議。(本次登入剩餘額度: <span style='color:#f37021;font-weight:bold;'>{remaining_quota}</span> 次)</p>", unsafe_allow_html=True)
         placeholder_text = "例：幫我分析各部門明日備料是否合理？"
     else:
         st.markdown(f"#### 🤖 {dept_name}部 - AI 營運決策大腦")
@@ -213,31 +213,28 @@ def render_ai_assistant(dept_name, display_df):
                             w_data = get_tomorrow_weather()
                             if isinstance(w_data, dict) and w_data.get("status") == "success":
                                 weather_info = f"""
-                                【天氣資料即時庫】
-                                以下資訊來自中央氣象署，不可自行猜測修改。
-                                地點：{w_data['location']} | 日期：{w_data['date']}
-                                ☀️ 白天天氣：{w_data['day']['weather']} | 降雨機率：{w_data['day']['pop']}% | 溫度：{w_data['day']['temp']}℃
-                                🌙 晚上天氣：{w_data['night']['weather']} | 降雨機率：{w_data['night']['pop']}% | 溫度：{w_data['night']['temp']}℃
+                                【系統即時資料】
+                                以下資訊來自 {w_data['source']}，屬即時真實數據，請優先採用此資訊評估天氣對營運的影響，不可自行猜測修改。
+                                📍 地點：{w_data['location']} | 日期：{w_data['date']}
+                                ☀️ [白天] 天氣：{w_data['day']['weather']} | 溫度：{w_data['day']['temp']}℃ | 降雨機率：{w_data['day']['pop']}%
+                                🌙 [晚上] 天氣：{w_data['night']['weather']} | 溫度：{w_data['night']['temp']}℃ | 降雨機率：{w_data['night']['pop']}%
                                 """
                             else:
-                                weather_info = f"\n【系統警告：中央氣象署目前無法取得資料，請不要自行猜測天氣，僅依據歷史數據分析】\n"
+                                weather_info = f"\n【系統警告：中央氣象署目前無法取得資料，請不要自行猜測天氣，僅依據歷史銷售資料進行分析】\n"
 
                         history_report = get_recent_history_report(dept_name)
                         current_plan_report = get_current_plans(dept_name)
                         
-                        # ==========================================
-                        # 🌟 核心升級：Prompt V3 (企業營運長決策架構)
-                        # ==========================================
                         if dept_name == "總管理處":
-                            role_prompt = f"你現在是阿布潘水產的【總管理處首席 AI 營運戰略幕僚】。今天是 {tw_now_str}，明天是 {tomorrow_wd}。"
+                            role_prompt = f"你現在是阿布潘水產的【總管理處首席 AI 營運戰略幕僚】。今天是 {tw_now_str}，明天是 {tomorrow_wd}。擁有跨部門最高分析權限。絕對禁止回答無關話題。"
                         else:
-                            role_prompt = f"你現在是阿布潘水產【{dept_name}部】的首席 AI 營運長。今天是 {tw_now_str}，明天是 {tomorrow_wd}。只能處理本部門業務。"
+                            role_prompt = f"你現在是阿布潘水產【{dept_name}部】的首席 AI 營運長。今天是 {tw_now_str}，明天是 {tomorrow_wd}。只能處理本部門業務。絕對禁止回答無關話題。"
 
                         system_instruction = f"""
                         {role_prompt}
                         
-                        【企業營運目標與決策優先級】
-                        你的職責是：協助阿布潘水產降低報廢率、提高商品周轉率、提升毛利。
+                        【營運目標與決策優先級】
+                        你的核心任務是：協助降低報廢率、提高商品周轉率、提升毛利。
                         在給出備料建議時，必須【嚴格遵守】以下決策優先順序：
                         第一：避免重大缺貨造成營業損失 (守住基本盤)
                         第二：嚴格控制報廢率 (控制耗損)
@@ -249,6 +246,7 @@ def render_ai_assistant(dept_name, display_df):
                         最高：POS實際銷售 (市場真實需求)
                         第二：實際出餐數 (廚房真實產能)
                         第三：預估出餐數 (人為預期)
+                        💡 備註：若實際出餐=50且POS=50，代表「可能缺貨」，而非市場需求只有50。
 
                         【時間衰減原則 (Time Decay Weighting)】
                         分析歷史資料時，請賦予不同時間點不同的權重：
@@ -277,7 +275,7 @@ def render_ai_assistant(dept_name, display_df):
                         2. 任何增加備料的建議，【正常情況下不得超過近期同星期平均銷量的 20%】。除非遇特殊事件或近期連續嚴重缺貨，才允許突破限制，但必須說明原因。
 
                         【系統資料庫】
-                        全商品庫：\n{menu_info}
+                        菜單與單價：\n{menu_info}
                         過去 30 天營運數據：\n{history_report}
 
                         【強制輸出格式】
@@ -290,7 +288,8 @@ def render_ai_assistant(dept_name, display_df):
                         💪 【預測信心】：XX%
                         ⚠️ 【風險與獨立見解】：(說明主要風險，若強烈反對使用者的提議請寫在此)
                         ---
-
+                        若資料不足，請直言「無歷史數據可供分析」，嚴禁虛構。
+                        
                         【系統資料交換格式 (極度重要)】
                         若你有提供任何商品的「建議數量」，在整個回答的【最底部】，必須輸出一段 JSON 格式資料供 Python 系統抓取，並用 <AI_DATA> 與 </AI_DATA> 標籤包起來。
                         格式如下 (必須為有效 JSON Array)：
@@ -314,8 +313,13 @@ def render_ai_assistant(dept_name, display_df):
                                 types.Content(role=role, parts=[types.Part.from_text(text=m["content"])])
                             )
                             
-                        chat = client.chats.create(model='gemini-2.5-flash', config=config, history=formatted_history)
-                        response = chat.send_message(full_prompt)
+                        try:
+                            chat = client.chats.create(model='gemini-2.5-flash', config=config, history=formatted_history)
+                            response = chat.send_message(full_prompt)
+                        except Exception as model_e:
+                            print(f"2.5 flash failed: {model_e}, trying 1.5 flash...")
+                            chat = client.chats.create(model='gemini-1.5-flash', config=config, history=formatted_history)
+                            response = chat.send_message(full_prompt)
                         
                         st.markdown(response.text)
                         
