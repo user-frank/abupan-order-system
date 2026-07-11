@@ -339,7 +339,7 @@ def render_ai_assistant(dept_name, display_df):
                             else:
                                 weather_info = f"\n【系統警告：中央氣象署目前無法取得資料，請不要自行猜測天氣，僅依據歷史銷售資料進行分析】\n"
 
-                        history_report = get_recent_history_report(dept_name, "黑鮪魚刺身")
+                        history_report = get_recent_history_report(dept_name, "特選鮭魚")
 
                         # ⭐ 新增：避免 Prompt 過長
                         if len(history_report) > 8000:
