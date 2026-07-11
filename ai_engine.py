@@ -30,49 +30,143 @@ def check_ai_key():
     except Exception:
         return False
 
-@st.cache_data(ttl=3600, show_spinner=False)
+@st.cache_data(ttl=1800, show_spinner=False)
 def get_tomorrow_weather(city_name="臺中市", district_name="北屯區"):
-    url = f"https://opendata.cwa.gov.tw/api/v1/rest/datastore/F-D0047-073"
-    params = {"Authorization": CWA_API_KEY, "locationName": district_name, "format": "JSON"}
-    
+
+    url = "https://opendata.cwa.gov.tw/api/v1/rest/datastore/F-D0047-073"
+
+    params = {
+        "Authorization": CWA_API_KEY,
+        "locationName": district_name,
+        "format": "JSON"
+    }
+
     try:
-        response = requests.get(url, params=params, timeout=10, verify=False)
-        response.raise_for_status()
-        
-        tw_now = datetime.now(TW_TZ)
-        tomorrow_str = (tw_now + timedelta(days=1)).strftime("%Y-%m-%d")
-        
+
+        response = requests.get(
+            url,
+            params=params,
+            timeout=15,
+            verify=False
+        )
+
+        if response.status_code != 200:
+            return {
+                "status": "error",
+                "msg": f"HTTP {response.status_code}\n{response.text}"
+            }
+
         data = response.json()
-        records = data.get("records", data.get("Records", {}))
-        locations_arr = records.get("locations", records.get("Locations", []))
-        if not locations_arr: return {"status": "error", "msg": "找不到地點資料"}
-            
-        loc_list = locations_arr[0].get("location", locations_arr[0].get("Location", []))
-        target_loc = next((loc for loc in loc_list if loc.get("locationName") == district_name), None)
-        if not target_loc: return {"status": "error", "msg": "找不到該行政區"}
-                
-        weather_elements = {item.get("elementName", ""): item for item in target_loc.get("weatherElement", [])}
-        
-        def get_val(el_name, t_idx):
+
+        records = data.get("records") or data.get("Records") or {}
+
+        locations = (
+            records.get("locations")
+            or records.get("Locations")
+            or []
+        )
+
+        if len(locations) == 0:
+            return {
+                "status": "error",
+                "msg": "找不到 locations"
+            }
+
+        location_list = (
+            locations[0].get("location")
+            or locations[0].get("Location")
+            or []
+        )
+
+        target = None
+
+        for loc in location_list:
+            if loc.get("locationName") == district_name:
+                target = loc
+                break
+
+        if target is None:
+            return {
+                "status": "error",
+                "msg": f"找不到 {district_name}"
+            }
+
+        weather_elements = (
+            target.get("weatherElement")
+            or target.get("WeatherElement")
+            or []
+        )
+
+        weather_dict = {}
+
+        for item in weather_elements:
+            weather_dict[item.get("elementName")] = item
+
+        tomorrow = (
+            datetime.now(TW_TZ)
+            + timedelta(days=1)
+        ).strftime("%Y-%m-%d")
+
+        def get_value(element_name, period):
+
             try:
-                times = weather_elements.get(el_name, {}).get("time", [])
-                t_data = [t for t in times if t.get("startTime", "").startswith(tomorrow_str)]
-                if not t_data: return "未知"
-                idx = t_idx if len(t_data) > t_idx else -1
-                return t_data[idx].get("elementValue", [])[0].get("value", "未知")
-            except: return "未知"
+
+                element = weather_dict[element_name]
+
+                times = element.get("time", [])
+
+                target_times = [
+                    t
+                    for t in times
+                    if t.get("startTime", "").startswith(tomorrow)
+                ]
+
+                if len(target_times) == 0:
+                    return "未知"
+
+                if period >= len(target_times):
+                    period = -1
+
+                values = target_times[period].get("elementValue", [])
+
+                if len(values) == 0:
+                    return "未知"
+
+                return values[0].get("value", "未知")
+
+            except Exception:
+                return "未知"
 
         return {
+
             "status": "success",
+
             "location": f"{city_name}{district_name}",
-            "date": tomorrow_str,
-            "day": {"weather": get_val("天氣現象", 0), "pop": get_val("12小時降雨機率", 0), "temp": get_val("溫度", 0)},
-            "night": {"weather": get_val("天氣現象", 1), "pop": get_val("12小時降雨機率", 1), "temp": get_val("溫度", 1)},
-            "source": "交通部中央氣象署 OpenData"
+
+            "date": tomorrow,
+
+            "day": {
+                "weather": get_value("天氣現象", 0),
+                "temp": get_value("溫度", 0),
+                "pop": get_value("12小時降雨機率", 0)
+            },
+
+            "night": {
+                "weather": get_value("天氣現象", 1),
+                "temp": get_value("溫度", 1),
+                "pop": get_value("12小時降雨機率", 1)
+            },
+
+            "source": "中央氣象署 OpenData"
+
         }
 
     except Exception as e:
-        return {"status": "error", "msg": str(e)}
+
+        return {
+            "status": "error",
+            "msg": str(e)
+        }
 
 def get_recent_history_report(dept_name):
     try:
@@ -225,7 +319,16 @@ def render_ai_assistant(dept_name, display_df):
                                 weather_info = f"\n【系統警告：中央氣象署目前無法取得資料，請不要自行猜測天氣，僅依據歷史銷售資料進行分析】\n"
 
                         history_report = get_recent_history_report(dept_name)
+
+                        # ⭐ 新增：避免 Prompt 過長
+                        if len(history_report) > 8000:
+                            history_report = history_report[:8000] + "\n...(歷史資料已摘要)..."
+
                         current_plan_report = get_current_plans(dept_name)
+
+                        # ⭐ 新增：避免 Prompt 過長
+                        if len(current_plan_report) > 2000:
+                            current_plan_report = current_plan_report[:2000]
                         
                         if dept_name == "總管理處":
                             role_prompt = f"你現在是阿布潘水產的【總管理處首席 AI 營運戰略幕僚】。今天是 {tw_now_str}，明天是 {tomorrow_wd}。擁有跨部門最高分析權限。絕對禁止回答無關話題。"
@@ -309,20 +412,35 @@ def render_ai_assistant(dept_name, display_df):
                         hidden_context = f"【隱藏系統資料】\n{weather_info}\n{current_plan_report}\n【使用者實際提問】\n"
                         full_prompt = hidden_context + prompt
 
+                        # ⭐ 只保留最近 6 則對話，避免 Context 無限成長
+                        recent_history = st.session_state.ai_chat_history[-6:]
+
                         formatted_history = []
-                        for m in st.session_state.ai_chat_history:
+
+                        for m in recent_history:
                             role = "user" if m["role"] == "user" else "model"
                             formatted_history.append(
-                                types.Content(role=role, parts=[types.Part.from_text(text=m["content"])])
+                                types.Content(
+                                    role=role,
+                                    parts=[types.Part.from_text(text=m["content"])]
+                                )
                             )
                             
                         try:
-                            chat = client.chats.create(model='gemini-2.5-flash', config=config, history=formatted_history)
+
+                            chat = client.chats.create(
+                                model="gemini-2.5-flash",
+                                config=config,
+                                history=formatted_history
+                            )
+
                             response = chat.send_message(full_prompt)
-                        except Exception as model_e:
-                            print(f"2.5 flash failed: {model_e}, trying 1.5 flash...")
-                            chat = client.chats.create(model='gemini-1.5-flash', config=config, history=formatted_history)
-                            response = chat.send_message(full_prompt)
+
+                        except Exception as e:
+
+                            st.exception(e)
+
+                            raise
                         
                         # 🌟 新增過濾邏輯：把給使用者的文字，和給系統的 JSON 分開
                         raw_text = response.text
@@ -344,7 +462,11 @@ def render_ai_assistant(dept_name, display_df):
                         st.markdown(display_text)
                         
                         # 對話紀錄也只存入乾淨的文字，避免未來干擾 AI 判斷
-                        st.session_state.ai_chat_history.append({"role": "user", "content": full_prompt})
+                        # ⭐ 不要把完整隱藏資料存入聊天紀錄
+                        st.session_state.ai_chat_history.append({
+                            "role": "user",
+                            "content": prompt
+                        })
                         st.session_state.ai_chat_history.append({"role": "assistant", "content": display_text})
                         
                         st.session_state.ai_query_count += 1
