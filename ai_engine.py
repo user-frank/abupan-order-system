@@ -175,6 +175,11 @@ def get_recent_history_report(dept_name):
         
         df = _get_cloud_dataframe(sheet)
         if df is None or df.empty: return "資料庫目前尚無歷史紀錄。"
+
+        # ====== 測試 ======
+        st.write("目前所有部門：", df["cat"].unique())
+        st.write("目前 dept_name：", dept_name)
+        # ==================
         
         tw_now = datetime.now(TW_TZ)
         past_days = [(tw_now - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(1, 31)]
