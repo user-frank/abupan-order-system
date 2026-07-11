@@ -427,12 +427,20 @@ def render_ai_assistant(dept_name, display_df):
                             )
                             
                         try:
-                            chat = client.chats.create(model='gemini-2.5-flash', config=config, history=formatted_history)
+
+                            chat = client.chats.create(
+                                model="gemini-2.5-flash",
+                                config=config,
+                                history=formatted_history
+                            )
+
                             response = chat.send_message(full_prompt)
-                        except Exception as model_e:
-                            print(f"2.5 flash failed: {model_e}, trying 1.5 flash...")
-                            chat = client.chats.create(model='gemini-1.5-flash', config=config, history=formatted_history)
-                            response = chat.send_message(full_prompt)
+
+                        except Exception as e:
+
+                            st.exception(e)
+
+                            raise
                         
                         # 🌟 新增過濾邏輯：把給使用者的文字，和給系統的 JSON 分開
                         raw_text = response.text
