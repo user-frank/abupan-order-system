@@ -228,11 +228,28 @@ def get_recent_history_report(dept_name, target_product=None):
                 o_qty, a_qty, p_qty, p_rev, price = row['ordered_qty'], row['actual_qty'], row['pos_qty'], row['pos_revenue'], row['price']
                 
                 status = ""
-                if o_qty > 0 and a_qty == 0: status = "(⏸️ 臨時取消出餐)"
-                elif a_qty > o_qty and p_qty >= o_qty: status = "(🔥 現場緊急追加)"
-                elif a_qty > p_qty: status = f"(⚠️ 報廢 {a_qty - p_qty} 份)"
-                elif a_qty < p_qty: status = f"(🚨 缺貨/超賣 {p_qty - a_qty} 份)"
-                else: status = "(✅ 完銷相符)"
+                ignore_for_ai = False
+
+                # ===== 臨時取消出餐 =====
+                if o_qty > 0 and a_qty == 0 and p_qty == 0:
+                    status = "(⏸️ 臨時取消出餐，不納入AI分析)"
+                    ignore_for_ai = True
+
+                elif a_qty > o_qty and p_qty >= o_qty:
+                    status = "(🔥 現場緊急追加)"
+                
+                elif a_qty > p_qty:
+                    status = f"(⚠️ 報廢 {a_qty - p_qty} 份)"
+                
+                elif a_qty < p_qty:
+                    status = f"(🚨 缺貨/超賣 {p_qty - a_qty} 份)"
+                
+                else:
+                    status = "(✅ 完銷相符)"
+
+                # 不把臨時取消出餐送給AI
+                if ignore_for_ai:
+                    continue
                     
                 discount_status = ""
                 if p_qty > 0 and price > 0:
