@@ -168,7 +168,7 @@ def get_tomorrow_weather(city_name="臺中市", district_name="北屯區"):
             "msg": str(e)
         }
 
-def get_recent_history_report(dept_name):
+def get_recent_history_report(dept_name, target_product=None):
     try:
         sheet = get_worksheet()
         if not sheet: return "無雲端資料庫連線。"
@@ -176,7 +176,7 @@ def get_recent_history_report(dept_name):
         df = _get_cloud_dataframe(sheet)
         if df is None or df.empty: return "資料庫目前尚無歷史紀錄。"
 
-        # ====== 測試 ======
+        # ====== 測試 ======def get_recent_history_report(dept_name, target_product=None):
         st.write("目前所有部門：", df["cat"].unique())
         st.write("目前 dept_name：", dept_name)
         # ==================
@@ -188,6 +188,13 @@ def get_recent_history_report(dept_name):
             history_df = df[df['date'].isin(past_days)].copy()
         else:
             history_df = df[(df['cat'] == dept_name) & (df['date'].isin(past_days))].copy()
+
+                # ===== 商品精準篩選 =====
+        if target_product:
+            history_df = history_df[
+                history_df['name'].str.contains(target_product, na=False)
+            ].copy()
+        # ======================
         
         if history_df.empty: return "過去近期尚無營業紀錄可供分析。"
         
