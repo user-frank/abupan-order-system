@@ -176,7 +176,7 @@ def get_recent_history_report(dept_name, target_product=None):
         df = _get_cloud_dataframe(sheet)
         if df is None or df.empty: return "資料庫目前尚無歷史紀錄。"
 
-        # ====== 測試 ======def get_recent_history_report(dept_name, target_product=None):
+        # ====== 測試 ======
         st.write("目前所有部門：", df["cat"].unique())
         st.write("目前 dept_name：", dept_name)
         # ==================
@@ -195,8 +195,14 @@ def get_recent_history_report(dept_name, target_product=None):
                 # ===== 商品精準篩選 =====
         if target_product:
             history_df = history_df[
-                history_df['name'].str.contains(target_product, na=False)
-            ].copy()
+                history_df['name'].str.contains(
+                    target_product,
+                    na=False
+                )
+            ]
+
+            st.write("目前搜尋商品:", target_product)
+            st.write("篩選後資料筆數:", len(history_df))
         # ======================
         
         if history_df.empty: return "過去近期尚無營業紀錄可供分析。"
