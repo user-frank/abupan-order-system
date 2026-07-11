@@ -180,6 +180,9 @@ def get_recent_history_report(dept_name, target_product=None):
         st.write("目前所有部門：", df["cat"].unique())
         st.write("目前 dept_name：", dept_name)
         # ==================
+        st.write("資料最早日期:", df['date'].min())
+        st.write("資料最晚日期:", df['date'].max())
+        st.write("總資料筆數:", len(df))
         
         tw_now = datetime.now(TW_TZ)
         past_days = [(tw_now - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(1, 31)]
