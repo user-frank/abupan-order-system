@@ -315,8 +315,8 @@ def show():
                 st.rerun()
                 
         # 🌟 召喚 AI 助理出現在出餐表的正下方
-        if render_ai_assistant is not None:
-            render_ai_assistant(DEPT_NAME, display_df)
+      # if render_ai_assistant is not None:
+     #       render_ai_assistant(DEPT_NAME, display_df)
 
     # ==========================================
     # 分頁 2：實際回報
