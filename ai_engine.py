@@ -46,116 +46,132 @@ def get_tomorrow_weather(city_name="臺中市", district_name="北屯區"):
         response = requests.get(
             url,
             params=params,
-            timeout=15,
+            timeout=20,
             verify=False
         )
 
-        if response.status_code != 200:
-            return {
-                "status": "error",
-                "msg": f"HTTP {response.status_code}\n{response.text}"
-            }
+        response.raise_for_status()
 
         data = response.json()
 
-        records = data.get("records") or data.get("Records") or {}
+        records = data.get("records", {})
+        locations = records.get("Locations", [])
 
-        locations = (
-            records.get("locations")
-            or records.get("Locations")
-            or []
-        )
-
-        if len(locations) == 0:
+        if not locations:
             return {
                 "status": "error",
-                "msg": "找不到 locations"
+                "msg": "找不到 Locations"
             }
 
-        location_list = (
-            locations[0].get("location")
-            or locations[0].get("Location")
-            or []
-        )
+        location_list = locations[0].get("Location", [])
 
         target = None
 
         for loc in location_list:
-            if loc.get("locationName") == district_name:
+            if loc.get("LocationName") == district_name:
                 target = loc
                 break
 
         if target is None:
             return {
                 "status": "error",
-                "msg": f"找不到 {district_name}"
+                "msg": f"找不到行政區：{district_name}"
             }
-
-        weather_elements = (
-            target.get("weatherElement")
-            or target.get("WeatherElement")
-            or []
-        )
 
         weather_dict = {}
 
-        for item in weather_elements:
-            weather_dict[item.get("elementName")] = item
+        for item in target.get("WeatherElement", []):
+            weather_dict[item.get("ElementName")] = item
 
         tomorrow = (
-            datetime.now(TW_TZ)
-            + timedelta(days=1)
+            datetime.now(TW_TZ) + timedelta(days=1)
         ).strftime("%Y-%m-%d")
 
         def get_value(element_name, period):
 
-            try:
+            element = weather_dict.get(element_name)
 
-                element = weather_dict[element_name]
-
-                times = element.get("time", [])
-
-                target_times = [
-                    t
-                    for t in times
-                    if t.get("startTime", "").startswith(tomorrow)
-                ]
-
-                if len(target_times) == 0:
-                    return "未知"
-
-                if period >= len(target_times):
-                    period = -1
-
-                values = target_times[period].get("elementValue", [])
-
-                if len(values) == 0:
-                    return "未知"
-
-                return values[0].get("value", "未知")
-
-            except Exception:
+            if element is None:
                 return "未知"
+
+            times = element.get("Time", [])
+
+            target_times = []
+
+            for t in times:
+
+                dt = (
+                    t.get("DataTime")
+                    or t.get("StartTime")
+                    or ""
+                )
+
+                if dt.startswith(tomorrow):
+                    target_times.append(t)
+
+            if not target_times:
+                return "未知"
+
+            if period >= len(target_times):
+                period = -1
+
+            values = target_times[period].get("ElementValue", [])
+
+            if not values:
+                return "未知"
+
+            value = values[0]
+
+            for key in (
+                "Weather",
+                "ProbabilityOfPrecipitation",
+                "Temperature",
+                "WeatherDescription",
+                "WindSpeed",
+                "WindDirection",
+                "RelativeHumidity",
+                "ComfortIndex",
+                "ApparentTemperature",
+                "DewPoint",
+                "value"
+            ):
+
+                if key in value:
+                    return value[key]
+
+            return next(iter(value.values()), "未知")
+
+        weather_am = get_value("天氣現象", 12)
+        temp_am = get_value("溫度", 12)
+        pop_am = get_value("3小時降雨機率", 12)
+
+        weather_pm = get_value("天氣現象", 21)
+        temp_pm = get_value("溫度", 21)
+        pop_pm = get_value("3小時降雨機率", 21)
+
+        summary = get_value("天氣預報綜合描述", 21)
 
         return {
 
             "status": "success",
 
-            "location": f"{city_name}{district_name}",
+            "location": city_name + district_name,
 
             "date": tomorrow,
 
             "day": {
-                "weather": get_value("天氣現象", 0),
-                "temp": get_value("溫度", 0),
-                "pop": get_value("12小時降雨機率", 0)
+                "weather": weather_am,
+                "temp": temp_am,
+                "pop": pop_am
             },
 
             "night": {
-                "weather": get_value("天氣現象", 1),
-                "temp": get_value("溫度", 1),
-                "pop": get_value("12小時降雨機率", 1)
+                "weather": weather_pm,
+                "temp": temp_pm,
+                "pop": pop_pm
             },
+
+            "summary": summary,
 
             "source": "中央氣象署 OpenData"
 
@@ -167,6 +183,7 @@ def get_tomorrow_weather(city_name="臺中市", district_name="北屯區"):
             "status": "error",
             "msg": str(e)
         }
+
 
 def get_recent_history_report(dept_name, target_product=None):
     try:
