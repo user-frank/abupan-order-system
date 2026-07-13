@@ -279,16 +279,42 @@ def get_recent_history_report(dept_name, target_product=None):
     except Exception as e:
         return f"調閱歷史資料失敗：{e}"
 
-def get_history_summary_report(dept_name, product_name):
+def get_recent_summary_report(dept_name, target_product=None):
+    """
+    AI 專用摘要版
+    不是把30天全部送給AI
+    而是先整理成摘要
+    """
 
     history = get_recent_history_report(
         dept_name,
-        product_name
+        target_product
     )
 
-    print(history)
+    if "失敗" in history:
+        return history
 
-    return history
+    lines = history.split("\n")
+
+    result = []
+
+    count = 0
+
+    for line in lines:
+
+        if line.startswith("🔹"):
+            result.append(line)
+            count = 0
+            continue
+
+        if line.strip().startswith("-"):
+
+            if count < 5:
+                result.append(line)
+
+            count += 1
+
+    return "\n".join(result)
 
 def get_current_plans(dept_name):
     try:
