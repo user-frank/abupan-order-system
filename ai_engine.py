@@ -576,7 +576,7 @@ def get_discount_report(dept_name, prompt):
 
     return "OK"
 
-def get_current_plans(...)
+def get_current_plans()
 
 def get_current_plans(dept_name):
     try:
