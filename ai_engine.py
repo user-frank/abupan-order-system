@@ -611,6 +611,63 @@ def render_ai_assistant(dept_name, display_df):
                             if name in prompt:
                                 target_product = name
                                 break
+
+                        # ==========================
+                        # AI 問題分類
+                        # ==========================
+                        
+                        question_type = "summary"
+                        
+                        # 日期查詢
+                        date_keywords = [
+                            "7/",
+                            "6/",
+                            "日期",
+                            "每天",
+                            "逐日",
+                            "連續",
+                            "哪一天",
+                            "7月",
+                            "6月"
+                        ]
+                        
+                        # 打折查詢
+                        discount_keywords = [
+                            "打折",
+                            "折扣",
+                            "折",
+                            "原價",
+                            "沒打折",
+                            "沒有打折"
+                        ]
+                        
+                        # 報廢查詢
+                        waste_keywords = [
+                            "報廢",
+                            "耗損",
+                            "丟掉"
+                        ]
+                        
+                        # 缺貨查詢
+                        short_keywords = [
+                            "缺貨",
+                            "超賣",
+                            "追加"
+                        ]
+                        
+                        if any(k in prompt for k in date_keywords):
+                            question_type = "date"
+                        
+                        if any(k in prompt for k in discount_keywords):
+                            question_type = "discount"
+                        
+                        if any(k in prompt for k in waste_keywords):
+                            question_type = "waste"
+                        
+                        if any(k in prompt for k in short_keywords):
+                            question_type = "short"
+
+                        st.success(question_type)
                         
                         history_report = get_recent_summary_report(
                             dept_name,
