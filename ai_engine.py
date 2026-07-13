@@ -511,9 +511,72 @@ def get_recent_summary_report(dept_name, target_product=None):
     except Exception as e:
 
         return str(e)
-        
+
+# ⭐⭐⭐ 新增放這裡
+def get_daily_history(
+    dept_name,
+    target_product=None
+):
+
+    try:
+
+        sheet = get_worksheet()
+
+        if not sheet:
+            return pd.DataFrame()
+
+        df = _get_cloud_dataframe(sheet)
+
+        if df is None or df.empty:
+            return pd.DataFrame()
+
+        # =========================
+        # 部門
+        # =========================
+
+        if dept_name != "總管理處":
+
+            df = df[
+                df["cat"] == dept_name
+            ]
+
+        # =========================
+        # 商品
+        # =========================
+
+        if target_product:
+
+            df = df[
+                df["name"] == target_product
+            ]
+
+        # =========================
+        # 日期
+        # =========================
+
+        df["date"] = pd.to_datetime(df["date"])
+
+        df = df.sort_values(
+            "date",
+            ascending=False
+        )
+
+    return df
+
+except:
+
+    return pd.DataFrame()
+
+
 def get_discount_report(dept_name, prompt):
-    return "測試成功：目前已進入 Discount Report"
+
+    df = get_daily_history(dept_name)
+
+    st.write(df.head())
+
+    return "OK"
+
+def get_current_plans(...)
 
 def get_current_plans(dept_name):
     try:
@@ -686,6 +749,8 @@ def render_ai_assistant(dept_name, display_df):
                                 dept_name,
                                 prompt
                             )
+
+                            st.error(history_report)
                         
                         else:
                         
