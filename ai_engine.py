@@ -406,6 +406,44 @@ def get_recent_summary_report(dept_name, target_product=None):
 
                 waste_rate = waste / actual * 100
 
+            # ==========================
+            # 重大事件摘要
+            # ==========================
+            
+            events = []
+            
+            for _, row in item_df.iterrows():
+            
+                waste = row["actual_qty"] - row["pos_qty"]
+            
+                # 大量報廢
+                if waste >= 20:
+                    events.append(
+                        f"{row['date']}：報廢 {int(waste)} 份"
+                    )
+            
+                # 明顯缺貨
+                elif row["pos_qty"] > row["actual_qty"]:
+                    diff = row["pos_qty"] - row["actual_qty"]
+            
+                    if diff >= 5:
+                        events.append(
+                            f"{row['date']}：缺貨 {int(diff)} 份"
+                        )
+            
+                # 緊急追加
+                elif row["actual_qty"] > row["ordered_qty"]:
+            
+                    add = row["actual_qty"] - row["ordered_qty"]
+            
+                    if add >= 10:
+                        events.append(
+                            f"{row['date']}：追加 {int(add)} 份"
+                        )
+            
+            # 最多保留最近3件
+            events = events[:3]
+
             report += f"""
             ======================
             
@@ -428,7 +466,11 @@ def get_recent_summary_report(dept_name, target_product=None):
             
             報廢率：
             {waste_rate:.1f}%
-            
+
+            重大事件：
+
+            {"無" if len(events)==0 else chr(10).join(events)}
+        
             ======================
             
             """
