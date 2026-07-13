@@ -280,42 +280,136 @@ def get_recent_history_report(dept_name, target_product=None):
         return f"調閱歷史資料失敗：{e}"
 
 def get_recent_summary_report(dept_name, target_product=None):
-    """
-    AI 專用摘要版
-    不是把30天全部送給AI
-    而是先整理成摘要
-    """
 
-    history = get_recent_history_report(
-        dept_name,
-        target_product
-    )
+    try:
 
-    if "失敗" in history:
-        return history
+        sheet = get_worksheet()
 
-    lines = history.split("\n")
+        if not sheet:
+            return "無法連線資料庫"
 
-    result = []
+        df = _get_cloud_dataframe(sheet)
 
-    count = 0
+        if df is None or df.empty:
+            return "沒有歷史資料"
 
-    for line in lines:
+        #=========================
+        # 部門
+        #=========================
 
-        if line.startswith("🔹"):
-            result.append(line)
-            count = 0
-            continue
+        if dept_name != "總管理處":
 
-        if line.strip().startswith("-"):
+            df = df[df["cat"] == dept_name]
 
-            if count < 5:
-                result.append(line)
+        #=========================
+        # 商品
+        #=========================
 
-            count += 1
+        if target_product:
 
-    return "\n".join(result)
+            df = df[
+                df["name"] == target_product
+            ]
 
+        if df.empty:
+            return "沒有符合資料"
+
+        #=========================
+        # 數字轉型
+        #=========================
+
+        numeric_cols = [
+
+            "ordered_qty",
+
+            "actual_qty",
+
+            "pos_qty",
+
+            "pos_revenue",
+
+            "price"
+
+        ]
+
+        for col in numeric_cols:
+
+            df[col] = pd.to_numeric(
+                df[col],
+                errors="coerce"
+            ).fillna(0)
+
+        #=========================
+        # 日期排序
+        #=========================
+
+        df = df.sort_values(
+            "date",
+            ascending=False
+        )
+
+        report = ""
+
+        #=========================
+        # 每個商品統計
+        #=========================
+
+        for product_name, item_df in df.groupby("name"):
+
+            recent7 = item_df.head(7)
+
+            avg7 = recent7["pos_qty"].mean()
+
+            avg30 = item_df["pos_qty"].mean()
+
+            max_sale = item_df["pos_qty"].max()
+
+            min_sale = item_df["pos_qty"].min()
+
+            waste = (
+                (
+                    item_df["actual_qty"]
+                    -
+                    item_df["pos_qty"]
+                ).clip(lower=0)
+            ).sum()
+
+            actual = item_df["actual_qty"].sum()
+
+            waste_rate = 0
+
+            if actual > 0:
+
+                waste_rate = waste / actual * 100
+
+            report += f"""
+======================
+商品：{product_name}
+
+近7天平均POS：
+{avg7:.1f}
+
+30天平均POS：
+{avg30:.1f}
+
+最高POS：
+{max_sale:.0f}
+
+最低POS：
+{min_sale:.0f}
+
+報廢率：
+{waste_rate:.1f}%
+
+======================
+
+"""
+
+        return report
+
+    except Exception as e:
+
+        return str(e)
 def get_current_plans(dept_name):
     try:
         sheet = get_worksheet()
@@ -417,7 +511,7 @@ def render_ai_assistant(dept_name, display_df):
                                 target_product = name
                                 break
                         
-                        history_report = get_history_summary_report(
+                        history_report = get_recent_summary_report(
                             dept_name,
                             target_product
                         )
