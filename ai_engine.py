@@ -572,7 +572,24 @@ def get_discount_report(dept_name, prompt):
 
     df = get_daily_history(dept_name)
 
-    st.write(df.head())
+    match = re.search(
+        r"(\d{1,2})/(\d{1,2}).*?(\d{1,2})/(\d{1,2})",
+        prompt
+    )
+    
+    if match:
+    
+        start = f"2026-{int(match.group(1)):02d}-{int(match.group(2)):02d}"
+    
+        end = f"2026-{int(match.group(3)):02d}-{int(match.group(4)):02d}"
+    
+        df = df[
+            (df["date"] >= start)
+            &
+            (df["date"] <= end)
+        ]
+    
+    st.write(df)
 
     return "OK"
 
