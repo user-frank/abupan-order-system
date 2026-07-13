@@ -616,7 +616,42 @@ def render_ai_assistant(dept_name, display_df):
                             dept_name,
                             target_product
                         )
+
+                        detail_report = ""
+
+                        detail_keywords = [
+
+                            "7/",
                         
+                            "6/",
+                        
+                            "日期",
+                        
+                            "每天",
+                        
+                            "逐日",
+                        
+                            "打折",
+                        
+                            "折",
+                        
+                            "連續",
+                        
+                            "哪一天",
+                        
+                            "7月",
+                        
+                            "6月"
+                        
+                        ]
+
+                        if any(k in prompt for k in detail_keywords):
+
+                        detail_report = get_recent_history_report(
+                            dept_name,
+                            target_product
+                        )
+                                                                    
                         st.text(history_report)
                         # ⭐ 新增：避免 Prompt 過長
                         if len(history_report) > 8000:
@@ -707,7 +742,27 @@ def render_ai_assistant(dept_name, display_df):
                         client = genai.Client(api_key=st.secrets["gemini_api_key"])
                         config = types.GenerateContentConfig(system_instruction=system_instruction)
                         
-                        hidden_context = f"【隱藏系統資料】\n{weather_info}\n{current_plan_report}\n【使用者實際提問】\n"
+                        hidden_context = f"""
+                        【隱藏系統資料】
+                        
+                        {weather_info}
+                        
+                        {current_plan_report}
+                        
+                        ==================
+                        商品統計摘要
+                        ==================
+                        
+                        {history_report}
+                        
+                        ==================
+                        逐日歷史資料
+                        ==================
+                        
+                        {detail_report}
+                        
+                        【使用者實際提問】
+                        """
                         full_prompt = hidden_context + prompt
 
                         # ⭐ 只保留最近 6 則對話，避免 Context 無限成長
