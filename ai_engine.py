@@ -356,6 +356,30 @@ def get_recent_summary_report(dept_name, target_product=None):
 
         for product_name, item_df in df.groupby("name"):
 
+            # =========================
+            # 同星期平均
+            # =========================
+            
+            today_weekday = (
+                datetime.now(TW_TZ)
+                + timedelta(days=1)
+            ).weekday()
+            
+            item_df = item_df.copy()
+            
+            item_df["weekday"] = pd.to_datetime(
+                item_df["date"]
+            ).dt.weekday
+            
+            same_weekday = item_df[
+                item_df["weekday"] == today_weekday
+            ].head(4)
+            
+            same_weekday_avg = same_weekday["pos_qty"].mean()
+            
+            if pd.isna(same_weekday_avg):
+                same_weekday_avg = 0
+
             recent7 = item_df.head(7)
 
             avg7 = recent7["pos_qty"].mean()
@@ -383,27 +407,31 @@ def get_recent_summary_report(dept_name, target_product=None):
                 waste_rate = waste / actual * 100
 
             report += f"""
-======================
-商品：{product_name}
-
-近7天平均POS：
-{avg7:.1f}
-
-30天平均POS：
-{avg30:.1f}
-
-最高POS：
-{max_sale:.0f}
-
-最低POS：
-{min_sale:.0f}
-
-報廢率：
-{waste_rate:.1f}%
-
-======================
-
-"""
+            ======================
+            
+            商品：{product_name}
+            
+            近四次相同星期平均：
+            {same_weekday_avg:.1f}
+            
+            近7天平均POS：
+            {avg7:.1f}
+            
+            30天平均POS：
+            {avg30:.1f}
+            
+            最高POS：
+            {max_sale:.0f}
+            
+            最低POS：
+            {min_sale:.0f}
+            
+            報廢率：
+            {waste_rate:.1f}%
+            
+            ======================
+            
+            """
 
         return report
 
