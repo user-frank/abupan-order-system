@@ -279,6 +279,17 @@ def get_recent_history_report(dept_name, target_product=None):
     except Exception as e:
         return f"調閱歷史資料失敗：{e}"
 
+def get_history_summary_report(dept_name, product_name):
+
+    history = get_recent_history_report(
+        dept_name,
+        product_name
+    )
+
+    print(history)
+
+    return history
+
 def get_current_plans(dept_name):
     try:
         sheet = get_worksheet()
@@ -380,7 +391,7 @@ def render_ai_assistant(dept_name, display_df):
                                 target_product = name
                                 break
                         
-                        history_report = get_recent_history_report(
+                        history_report = get_recent_summary_report(
                             dept_name,
                             target_product
                         )
