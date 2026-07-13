@@ -391,7 +391,7 @@ def render_ai_assistant(dept_name, display_df):
                                 target_product = name
                                 break
                         
-                        history_report = get_recent_summary_report(
+                        history_report = get_history_summary_report(
                             dept_name,
                             target_product
                         )
