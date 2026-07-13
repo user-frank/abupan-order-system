@@ -511,6 +511,10 @@ def get_recent_summary_report(dept_name, target_product=None):
     except Exception as e:
 
         return str(e)
+        
+def get_discount_report(dept_name, prompt):
+    return "測試成功：目前已進入 Discount Report"
+
 def get_current_plans(dept_name):
     try:
         sheet = get_worksheet()
@@ -669,10 +673,26 @@ def render_ai_assistant(dept_name, display_df):
 
                         st.success(question_type)
                         
-                        history_report = get_recent_summary_report(
-                            dept_name,
-                            target_product
-                        )
+                        if question_type == "summary":
+
+                            history_report = get_recent_summary_report(
+                                dept_name,
+                                target_product
+                            )
+                        
+                        elif question_type == "discount":
+                        
+                            history_report = get_discount_report(
+                                dept_name,
+                                prompt
+                            )
+                        
+                        else:
+                        
+                            history_report = get_recent_summary_report(
+                                dept_name,
+                                target_product
+                            )
 
                         detail_report = ""
 
