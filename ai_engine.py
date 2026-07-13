@@ -380,15 +380,37 @@ def get_recent_summary_report(dept_name, target_product=None):
             if pd.isna(same_weekday_avg):
                 same_weekday_avg = 0
 
-            recent7 = item_df.head(7)
+            # ===============================
+            # 只保留真正有販售的資料
+            # (POS > 0 代表真的有賣出去)
+            # ===============================
+            sale_df = item_df[
+                item_df["pos_qty"] > 0
+            ].copy()
 
-            avg7 = recent7["pos_qty"].mean()
-
-            avg30 = item_df["pos_qty"].mean()
-
-            max_sale = item_df["pos_qty"].max()
-
-            min_sale = item_df["pos_qty"].min()
+            if sale_df.empty:
+            
+                recent7 = sale_df
+            
+                avg7 = 0
+            
+                avg30 = 0
+            
+                max_sale = 0
+            
+                min_sale = 0
+            
+            else:
+            
+                recent7 = sale_df.head(7)
+            
+                avg7 = sale_df.head(7)["pos_qty"].mean()
+            
+                avg30 = sale_df["pos_qty"].mean()
+            
+                max_sale = sale_df["pos_qty"].max()
+            
+                min_sale = sale_df["pos_qty"].min()
 
             waste = (
                 (
