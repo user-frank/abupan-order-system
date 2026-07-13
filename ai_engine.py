@@ -561,11 +561,11 @@ def get_daily_history(
             ascending=False
         )
 
-    return df
+        return df
 
-except:
+    except:
 
-    return pd.DataFrame()
+        return pd.DataFrame()
 
 
 def get_discount_report(dept_name, prompt):
@@ -575,8 +575,6 @@ def get_discount_report(dept_name, prompt):
     st.write(df.head())
 
     return "OK"
-
-def get_current_plans()
 
 def get_current_plans(dept_name):
     try:
