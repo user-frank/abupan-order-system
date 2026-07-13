@@ -356,8 +356,8 @@ def get_recent_summary_report(dept_name, target_product=None):
 
         for product_name, item_df in df.groupby("name"):
 
-            # =========================
-            # 同星期平均
+           # =========================
+            # 同星期平均 (近四次真正有販售)
             # =========================
             
             today_weekday = (
@@ -371,14 +371,23 @@ def get_recent_summary_report(dept_name, target_product=None):
                 item_df["date"]
             ).dt.weekday
             
-            same_weekday = item_df[
-                item_df["weekday"] == today_weekday
-            ].head(4)
+            same_weekday = (
+                item_df[
+                    (item_df["weekday"] == today_weekday)
+                    &
+                    (item_df["pos_qty"] > 0)
+                ]
+                .sort_values("date", ascending=False)
+                .head(4)
+            )
             
-            same_weekday_avg = same_weekday["pos_qty"].mean()
+            if same_weekday.empty:
             
-            if pd.isna(same_weekday_avg):
                 same_weekday_avg = 0
+            
+            else:
+            
+                same_weekday_avg = same_weekday["pos_qty"].mean()
 
             # ===============================
             # 只保留真正有販售的資料
