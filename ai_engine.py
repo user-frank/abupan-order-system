@@ -647,10 +647,10 @@ def render_ai_assistant(dept_name, display_df):
 
                         if any(k in prompt for k in detail_keywords):
 
-                        detail_report = get_recent_history_report(
-                            dept_name,
-                            target_product
-                        )
+                            detail_report = get_recent_history_report(
+                                dept_name,
+                                target_product
+                            )
                                                                     
                         st.text(history_report)
                         # ⭐ 新增：避免 Prompt 過長
