@@ -519,6 +519,53 @@ def parse_date_range(prompt):
     start_date = None
     end_date = None
 
+    weekday = today.weekday()      # 星期一=0
+        
+    this_monday = today - timedelta(days=weekday)
+    this_sunday = this_monday + timedelta(days=6)
+
+    # -----------------------
+    # 星期幾
+    # -----------------------
+
+    week_map = {
+
+        "星期一":0,
+        "週一":0,
+    
+        "星期二":1,
+        "週二":1,
+    
+        "星期三":2,
+        "週三":2,
+    
+        "星期四":3,
+        "週四":3,
+    
+        "星期五":4,
+        "週五":4,
+    
+        "星期六":5,
+        "週六":5,
+    
+        "星期日":6,
+        "星期天":6,
+        "週日":6
+    
+    }
+
+    for key, wd in week_map.items():
+
+        if key in prompt:
+    
+            start_date = this_monday + timedelta(days=wd)
+    
+            end_date = start_date
+    
+            break
+
+    
+
     # -----------------------
     # 今天、昨天、明天
     # -----------------------
@@ -564,14 +611,9 @@ def parse_date_range(prompt):
 
             start_date = today - timedelta(days=days-1)
 
-        # -----------------------
-        # 本週 / 上週 / 下週
-        # -----------------------
-        
-        weekday = today.weekday()      # 星期一=0
-        
-        this_monday = today - timedelta(days=weekday)
-        this_sunday = this_monday + timedelta(days=6)
+    # -----------------------
+    # 本週 / 上週 / 下週
+    # -----------------------
     
     # 本週
     if "本週" in prompt or "這週" in prompt or "這星期" in prompt:
@@ -629,46 +671,6 @@ def parse_date_range(prompt):
                 end_date = start_date
     
                 break
-
-    # -----------------------
-    # 星期幾
-    # -----------------------
-
-    week_map = {
-
-        "星期一":0,
-        "週一":0,
-    
-        "星期二":1,
-        "週二":1,
-    
-        "星期三":2,
-        "週三":2,
-    
-        "星期四":3,
-        "週四":3,
-    
-        "星期五":4,
-        "週五":4,
-    
-        "星期六":5,
-        "週六":5,
-    
-        "星期日":6,
-        "星期天":6,
-        "週日":6
-    
-    }
-
-    for key, wd in week_map.items():
-
-        if key in prompt:
-    
-            start_date = this_monday + timedelta(days=wd)
-    
-            end_date = start_date
-    
-            break
 
     
     # -----------------------
