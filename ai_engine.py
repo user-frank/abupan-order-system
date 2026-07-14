@@ -753,8 +753,20 @@ def parse_date_range(prompt):
             ).date()
 
             end_date = start_date
+     # =========================
+     # 日期解析失敗保護
+     # =========================
 
-    return start_date, end_date
+     if start_date is None:
+
+        start_date = today
+
+
+     if end_date is None:
+
+        end_date = today 
+
+     return start_date, end_date
 
 # ⭐⭐⭐ 新增放這裡
 def get_daily_history(
@@ -841,6 +853,92 @@ def get_discount_report(dept_name, prompt):
     st.write(df)
 
     return "OK"
+
+def get_statistics_report(
+    dept_name,
+    prompt
+):
+
+    df = get_daily_history(dept_name)
+
+    if df.empty:
+        return "沒有資料"
+
+    # -------------------------
+    # 日期範圍
+    # -------------------------
+
+    start_date, end_date = parse_date_range(prompt)
+
+    df["date"] = pd.to_datetime(df["date"]).dt.date
+
+    start_date = start_date.date() if hasattr(start_date, "date") else start_date
+
+    end_date = end_date.date() if hasattr(end_date, "date") else end_date
+
+    df = df[
+        (df["date"] >= start_date)
+        &
+        (df["date"] <= end_date)
+    ]
+
+    if df.empty:
+        return "此日期沒有資料"
+
+    # -------------------------
+    # 數字
+    # -------------------------
+
+    df["pos_revenue"] = pd.to_numeric(
+        df["pos_revenue"],
+        errors="coerce"
+    ).fillna(0)
+
+    # -------------------------
+    # Top N
+    # -------------------------
+    
+    top_n = 10
+    if "前三" in prompt or "前3" in prompt:
+        top_n = 3
+
+    elif "前五" in prompt or "前5" in prompt:
+        top_n = 5
+
+    elif "前十" in prompt or "top10" in prompt.lower():
+        top_n = 10
+
+    elif "前二十" in prompt or "前20" in prompt:
+        top_n = 20
+    ranking = (
+
+        df.groupby("name")["pos_revenue"]
+
+        .sum()
+
+        .sort_values(ascending=False)
+
+        .head(top_n)
+
+    )
+
+    report = f"""
+營業額排行（{start_date} ~ {end_date}）
+
+"""
+
+    for i, (name, revenue) in enumerate(
+        ranking.items(),
+        start=1
+    ):
+
+        report += (
+            f"{i}. {name}"
+            f"：NT$ {revenue:,.0f}\n"
+        )
+
+    return report
+    
 
 def get_current_plans(dept_name):
     try:
@@ -985,6 +1083,24 @@ def render_ai_assistant(dept_name, display_df):
                             "超賣",
                             "追加"
                         ]
+
+                        statistics_keywords = [
+
+                            "營業額",
+                            "營收",
+                            "最高",
+                            "最低",
+                            "排行",
+                            "排名",
+                            "前三",
+                            "前3",
+                            "top",
+                            "最好賣",
+                            "最差",
+                            "收入",
+                            "業績"
+                        
+                        ]
                         
                         if any(k in prompt for k in date_keywords):
                             question_type = "date"
@@ -994,6 +1110,9 @@ def render_ai_assistant(dept_name, display_df):
                         
                         if any(k in prompt for k in waste_keywords):
                             question_type = "waste"
+
+                        if any(k in prompt.lower() for k in statistics_keywords):
+                            question_type = "statistics"
                         
                         if any(k in prompt for k in short_keywords):
                             question_type = "short"
@@ -1005,6 +1124,13 @@ def render_ai_assistant(dept_name, display_df):
                             history_report = get_recent_summary_report(
                                 dept_name,
                                 target_product
+                            )
+                        
+                        elif question_type == "statistics":
+                        
+                            history_report = get_statistics_report(
+                                dept_name,
+                                prompt
                             )
                         
                         elif question_type == "discount":
