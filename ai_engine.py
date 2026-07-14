@@ -554,16 +554,22 @@ def parse_date_range(prompt):
     
     }
 
-    for key, wd in week_map.items():
-
-        if key in prompt:
+    if (
+        "上週" not in prompt
+        and "上星期" not in prompt
+        and "下週" not in prompt
+        and "下星期" not in prompt
+    ):
     
-            start_date = this_monday + timedelta(days=wd)
+        for key, wd in week_map.items():
     
-            end_date = start_date
+            if key in prompt:
     
-            break
-
+                start_date = this_monday + timedelta(days=wd)
+    
+                end_date = start_date
+    
+                break
     
 
     # -----------------------
