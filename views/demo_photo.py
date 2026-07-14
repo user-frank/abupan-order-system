@@ -67,6 +67,10 @@ def upload_photo_to_drive(file_bytes, filename):
             "image_base64": b64_str
         }
         res = requests.post(GAS_URL, json=payload, timeout=30)
+
+        st.write("Status Code：", res.status_code)
+        st.write("Response：", res.text)
+        
         data = res.json()
         if data.get("status") == "success":
             return f"https://drive.google.com/thumbnail?id={data['file_id']}&sz=w1000"
