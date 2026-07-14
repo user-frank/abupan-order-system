@@ -591,6 +591,45 @@ def parse_date_range(prompt):
         start_date = this_monday + timedelta(days=7)
         end_date = this_sunday + timedelta(days=7)
 
+   
+    # -----------------------
+    # 上週五
+    # 下週三
+    # 這星期二
+    # -----------------------
+
+    for key, wd in week_map.items():
+
+        if "上週" in prompt or "上星期" in prompt:
+    
+            if key in prompt:
+    
+                start_date = this_monday - timedelta(days=7) + timedelta(days=wd)
+    
+                end_date = start_date
+    
+                break
+    
+        elif "下週" in prompt:
+    
+            if key in prompt:
+    
+                start_date = this_monday + timedelta(days=7) + timedelta(days=wd)
+    
+                end_date = start_date
+    
+                break
+    
+        elif "本週" in prompt or "這週" in prompt or "這星期" in prompt:
+    
+            if key in prompt:
+    
+                start_date = this_monday + timedelta(days=wd)
+    
+                end_date = start_date
+    
+                break
+
     # -----------------------
     # 星期幾
     # -----------------------
@@ -631,45 +670,8 @@ def parse_date_range(prompt):
     
             break
 
+    
     # -----------------------
-    # 上週五
-    # 下週三
-    # 這星期二
-    # -----------------------
-
-    for key, wd in week_map.items():
-
-        if "上週" in prompt or "上星期" in prompt:
-    
-            if key in prompt:
-    
-                start_date = this_monday - timedelta(days=7) + timedelta(days=wd)
-    
-                end_date = start_date
-    
-                break
-    
-        elif "下週" in prompt or "下星期" in prompt:
-    
-            if key in prompt:
-    
-                start_date = this_monday + timedelta(days=7) + timedelta(days=wd)
-    
-                end_date = start_date
-    
-                break
-    
-        elif "本週" in prompt or "這週" in prompt or "這星期" in prompt:
-    
-            if key in prompt:
-    
-                start_date = this_monday + timedelta(days=wd)
-    
-                end_date = start_date
-    
-                break
-
-   # -----------------------
     # 幾個禮拜
     # -----------------------
     
@@ -753,20 +755,20 @@ def parse_date_range(prompt):
             ).date()
 
             end_date = start_date
-     # =========================
-     # 日期解析失敗保護
-     # =========================
+    # =========================
+    # 日期解析失敗保護
+    # =========================
 
-     if start_date is None:
+    if start_date is None:
 
         start_date = today
 
 
-     if end_date is None:
+    if end_date is None:
 
         end_date = today 
 
-     return start_date, end_date
+    return start_date, end_date
 
 # ⭐⭐⭐ 新增放這裡
 def get_daily_history(
