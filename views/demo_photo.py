@@ -14,7 +14,7 @@ Image.MAX_IMAGE_PIXELS = None
 # ==========================================
 # ⚙️ 設定區
 # ==========================================
-GAS_URL = "https://script.google.com/macros/s/AKfycbyTqQxSCLm_fC7P1uVjZkVqP2YpGzO8xWqWbU2n4J-X_z1Pj9sL-L8fM6Q_9K5vBw/exec"
+GAS_URL = "https://script.google.com/macros/s/AKfycbzJVbW4al2ficgAX_5ac5H3OlLKkE_yIRqzCkZY2UTTxzq9zP2hcmk_rKHJAyZ-AvjBOw/exec"
 FOLDER_ID = "1aBcDeFgHiJkLmNoPqRsTuVwXyZ123456" # 請確保這是你正確的資料夾 ID
 
 # ==========================================
