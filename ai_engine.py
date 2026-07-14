@@ -512,6 +512,107 @@ def get_recent_summary_report(dept_name, target_product=None):
 
         return str(e)
 
+def parse_date_range(prompt):
+
+    today = datetime.now(TW_TZ).date()
+
+    start_date = None
+    end_date = None
+
+    # -----------------------
+    # 今天、昨天、明天
+    # -----------------------
+
+    if "今天" in prompt:
+
+        start_date = today
+        end_date = today
+
+    elif "昨天" in prompt:
+
+        start_date = today - timedelta(days=1)
+        end_date = start_date
+
+    elif "前天" in prompt:
+
+        start_date = today - timedelta(days=2)
+        end_date = start_date
+
+    elif "明天" in prompt:
+
+        start_date = today + timedelta(days=1)
+        end_date = start_date
+
+    elif "後天" in prompt:
+
+        start_date = today + timedelta(days=2)
+        end_date = start_date
+
+    # -----------------------
+    # 最近X天
+    # -----------------------
+
+    else:
+
+        m = re.search(r"最近(\d+)天", prompt)
+
+        if m:
+
+            days = int(m.group(1))
+
+            end_date = today
+
+            start_date = today - timedelta(days=days-1)
+
+    # -----------------------
+    # 7/1~7/5
+    # -----------------------
+
+    if start_date is None:
+
+        m = re.search(
+            r"(\d{1,2})/(\d{1,2})\s*[~-]\s*(\d{1,2})/(\d{1,2})",
+            prompt
+        )
+
+        if m:
+
+            year = today.year
+
+            start_date = datetime(
+                year,
+                int(m.group(1)),
+                int(m.group(2))
+            ).date()
+
+            end_date = datetime(
+                year,
+                int(m.group(3)),
+                int(m.group(4))
+            ).date()
+
+    # -----------------------
+    # 單一天 7/5
+    # -----------------------
+
+    if start_date is None:
+
+        m = re.search(r"(\d{1,2})/(\d{1,2})", prompt)
+
+        if m:
+
+            year = today.year
+
+            start_date = datetime(
+                year,
+                int(m.group(1)),
+                int(m.group(2))
+            ).date()
+
+            end_date = start_date
+
+    return start_date, end_date
+
 # ⭐⭐⭐ 新增放這裡
 def get_daily_history(
     dept_name,
@@ -569,6 +670,11 @@ def get_daily_history(
 
 
 def get_discount_report(dept_name, prompt):
+
+    start_date, end_date = parse_date_range(prompt)
+
+    st.write(start_date)
+    st.write(end_date)
 
     df = get_daily_history(dept_name)
 
