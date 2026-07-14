@@ -15,7 +15,7 @@ Image.MAX_IMAGE_PIXELS = None
 # ⚙️ 設定區
 # ==========================================
 GAS_URL = "https://script.google.com/macros/s/AKfycbzJVbW4al2ficgAX_5ac5H3OlLKkE_yIRqzCkZY2UTTxzq9zP2hcmk_rKHJAyZ-AvjBOw/exec"
-FOLDER_ID = "1aBcDeFgHiJkLmNoPqRsTuVwXyZ123456" # 請確保這是你正確的資料夾 ID
+FOLDER_ID = "1axu-8dPpCkYLjNqOvc6rYeTO2rDcbM7n" # 請確保這是你正確的資料夾 ID
 
 # ==========================================
 # 📸 影像處理與上傳引擎 (Segfault 防護版)
