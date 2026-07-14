@@ -449,8 +449,21 @@ def get_recent_summary_report(dept_name, target_product=None):
             
                 # 大量報廢
                 if waste >= 20:
+                
+                    event_date = pd.to_datetime(row["date"])
+                
+                    weekday_name = [
+                        "一",
+                        "二",
+                        "三",
+                        "四",
+                        "五",
+                        "六",
+                        "日"
+                    ][event_date.weekday()]
+                
                     events.append(
-                        f"{row['date']}：報廢 {int(waste)} 份"
+                        f"{row['date']}（週{weekday_name}）：報廢 {int(waste)} 份"
                     )
             
                 # 明顯缺貨
@@ -458,18 +471,42 @@ def get_recent_summary_report(dept_name, target_product=None):
                     diff = row["pos_qty"] - row["actual_qty"]
             
                     if diff >= 5:
+                        event_date = pd.to_datetime(row["date"])
+                        
+                        weekday_name = [
+                            "一",
+                            "二",
+                            "三",
+                            "四",
+                            "五",
+                            "六",
+                            "日"
+                        ][event_date.weekday()]
+                        
                         events.append(
-                            f"{row['date']}：缺貨 {int(diff)} 份"
+                            f"{row['date']}（週{weekday_name}）：缺貨 {int(diff)} 份"
                         )
-            
+                                    
                 # 緊急追加
                 elif row["actual_qty"] > row["ordered_qty"]:
             
                     add = row["actual_qty"] - row["ordered_qty"]
             
                     if add >= 10:
+                        event_date = pd.to_datetime(row["date"])
+
+                        weekday_name = [
+                            "一",
+                            "二",
+                            "三",
+                            "四",
+                            "五",
+                            "六",
+                            "日"
+                        ][event_date.weekday()]
+                        
                         events.append(
-                            f"{row['date']}：追加 {int(add)} 份"
+                            f"{row['date']}（週{weekday_name}）：追加 {int(add)} 份"
                         )
             
             # 最多保留最近3件
