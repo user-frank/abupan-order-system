@@ -552,7 +552,7 @@ def parse_date_range(prompt):
     # 最近X天
     # -----------------------
 
-    else:
+ 
 
         m = re.search(r"最近(\d+)天", prompt)
 
@@ -564,14 +564,14 @@ def parse_date_range(prompt):
 
             start_date = today - timedelta(days=days-1)
 
-    # -----------------------
-    # 本週 / 上週 / 下週
-    # -----------------------
-
-    weekday = today.weekday()      # 星期一=0
-
-    this_monday = today - timedelta(days=weekday)
-    this_sunday = this_monday + timedelta(days=6)
+        # -----------------------
+        # 本週 / 上週 / 下週
+        # -----------------------
+        
+        weekday = today.weekday()      # 星期一=0
+        
+        this_monday = today - timedelta(days=weekday)
+        this_sunday = this_monday + timedelta(days=6)
     
     # 本週
     if "本週" in prompt or "這週" in prompt or "這星期" in prompt:
