@@ -92,7 +92,21 @@ def check_login():
 
     st.markdown("<br><br>", unsafe_allow_html=True) # 往下推一點比較好看
 
-    st.markdown("<h2 style='text-align: center; color: #FFF;'>👨‍🍳 潘大廚</h2>", unsafe_allow_html=True)
+    st.markdown("""
+    <div style='text-align: center; margin-bottom: 8px;'>
+        <span style='
+            background-color: #00873E;
+            color: #FFFFFF;
+            font-size: 26px;
+            font-weight: 900;
+            padding: 6px 20px;
+            border-radius: 8px;
+            letter-spacing: 3px;
+            display: inline-block;
+            box-shadow: 0 4px 10px rgba(0, 135, 62, 0.35);
+        '>👨‍🍳 潘大廚</span>
+    </div>
+    """, unsafe_allow_html=True)
 
     st.markdown("<p style='text-align: center; color: #00A850; font-weight: bold;'>一日三餐，就吃潘大廚</p>", unsafe_allow_html=True)
 
