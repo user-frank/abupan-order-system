@@ -3,7 +3,7 @@ from splash_screen import show_splash_screen
 from auth_engine import check_login, logout
 
 # 1. 網頁基本設定 (必須是第一行)
-st.set_page_config(page_title="阿布潘員工系統", page_icon="🐟", layout="wide")
+st.set_page_config(page_title="潘大廚", page_icon="👨‍🍳", layout="wide")
 
 # ==========================================
 # 2. 全域 CSS 樣式與裝潢 (保留你原本的心血，完全不動)
@@ -82,7 +82,7 @@ if is_logged_in:
     col1, col2 = st.columns([3, 1])
     with col1:
         # 顯示目前使用者身分
-        st.markdown(f"<h4 style='margin-top: 10px; color: #f37021 !important;'>👤 {current_dept} - {current_user}</h4>", unsafe_allow_html=True)
+        st.markdown(f"<h4 style='margin-top: 10px; color: #1B7A3E !important;'>👤 {current_dept} - {current_user}</h4>", unsafe_allow_html=True)
     with col2:
         # 右上角登出按鈕
         if st.button("🚪 登出", use_container_width=True):
