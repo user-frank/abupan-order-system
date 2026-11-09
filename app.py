@@ -90,33 +90,26 @@ if is_logged_in:
     st.divider() # 畫一條分隔線
     
     # --- 根據部門轉接房間 ---
-    if current_dept == "總管理":
+    # --- 根據 4 大身分轉接專屬房間 ---
+    if current_dept == "👑 老闆":
         from views import boss
         boss.show()
 
-    elif current_dept == "測試部":       # 🌟 新增這兩行
-        from views import demo_photo    # 🌟 讓系統轉接到測試房間
+    elif current_dept == "👨‍🍳 營運主廚 (廚政與門市)":
+        if current_user == "門市後台管理":
+            from views import store_backstage
+            store_backstage.show()
+        else:
+            from views import sashimi # 前台出餐
+            sashimi.show()
+
+    elif current_dept == "💰 財務會計":
+        st.title("💰 財務會計專區")
+        st.info("📊 門市成本核算與毛利損益報表模組建置中...")
+
+    elif current_dept == "🛠️ 系統管理員":
+        from views import demo_photo
         demo_photo.show()
-        
-    elif current_dept == "壽司":
-        from views import sushi
-        sushi.show()
-        
-    elif current_dept == "生魚片":
-        from views import sashimi
-        sashimi.show()
-        
-    elif current_dept == "冰鮮":
-        from views import fresh
-        fresh.show()
-        
-    elif current_dept == "活體":
-        from views import live
-        live.show()
-        
-    elif current_dept == "庫克島":
-        from views import cook
-        cook.show()
-        
+
     else:
-        st.error(f"❌ 系統錯誤：找不到 {current_dept} 的專屬房間，請聯絡系統管理員。")
+        st.error(f"❌ 找不到 {current_dept} 的專屬房間，請聯繫系統管理員。")
