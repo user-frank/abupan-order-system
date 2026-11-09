@@ -2,13 +2,13 @@ import streamlit as st
 import time
 
 def show_splash_screen():
-    # 🌟 使用純 CSS 打造「尊榮黑金」風格開場動畫
+    # 🌟 「潘大廚」專屬尊榮品牌開場動畫
     splash_html = """
     <style>
     /* 引入 Google 現代黑體字型 */
-    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@500;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@500;700;900&display=swap');
     
-    /* 滿版黑色遮罩背景 (黑金的"黑") */
+    /* 滿版黑色遮罩背景 */
     #splash-screen {
         position: fixed;
         top: 0;
@@ -21,47 +21,68 @@ def show_splash_screen():
         justify-content: center;
         align-items: center;
         z-index: 999999; 
-        animation: fadeOut 0.6s ease-in-out 1.8s forwards; 
+        animation: fadeOut 0.6s ease-in-out 2.0s forwards; 
+    }
+
+    /* 頂部小標題 (全新品牌) */
+    .splash-brand-tag {
+        color: #00A850; /* 潘大廚招牌綠 */
+        font-family: 'Noto Sans TC', sans-serif;
+        font-size: 0.95rem;
+        letter-spacing: 4px;
+        font-weight: 700;
+        margin-bottom: 8px;
+        opacity: 0;
+        animation: slideUp 0.6s ease-out 0.1s forwards;
     }
 
     /* 主標題排版設定 */
     .splash-title {
         font-family: 'Noto Sans TC', sans-serif;
-        font-size: 2.6rem;
-        font-weight: 700;
-        letter-spacing: 3px;
-        margin-bottom: 10px;
+        font-size: 3.2rem;
+        font-weight: 900;
+        letter-spacing: 5px;
+        margin-bottom: 8px;
         animation: slideUp 0.8s ease-out forwards;
     }
 
-    /* 👑 核心：黑金漸層文字特效 */
+    /* 👑 核心：香檳金金屬質感特效 */
     .gold-text {
-        /* 香檳金漸層：做出金屬反光的層次感 */
         background: linear-gradient(135deg, #D4AF37 0%, #FFF2CD 40%, #D4AF37 80%, #AA771C 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
-        /* 加上微微的金色光暈 */
-        filter: drop-shadow(0px 0px 10px rgba(212, 175, 55, 0.4));
+        filter: drop-shadow(0px 0px 12px rgba(212, 175, 55, 0.45));
     }
 
-    /* 副標題樣式 (還原成乾淨的銀灰色) */
+    /* 品牌精神 Slogan */
+    .splash-slogan {
+        color: #00C853; /* 醒目品牌鮮綠 */
+        font-family: 'Noto Sans TC', sans-serif;
+        font-size: 1.15rem;
+        font-weight: 700;
+        letter-spacing: 3px;
+        margin-bottom: 12px;
+        opacity: 0;
+        animation: slideUp 0.8s ease-out 0.3s forwards;
+    }
+
+    /* 系統副標題 */
     .splash-subtitle {
-        color: #E0E0E0; 
+        color: #A0A0A0; 
         font-family: 'Arial', sans-serif;
-        font-size: 1.1rem;
-        font-weight: bold;
-        letter-spacing: 6px;
-        animation: slideUp 0.8s ease-out 0.2s forwards;
+        font-size: 0.9rem;
+        letter-spacing: 4px;
         opacity: 0; 
+        animation: slideUp 0.8s ease-out 0.4s forwards;
     }
     
-    /* 載入轉圈圈動畫 (配合改成尊榮金) */
+    /* 載入轉圈圈動畫 (尊榮金) */
     .spinner {
-        margin-top: 35px;
-        width: 40px;
-        height: 40px;
-        border: 4px solid rgba(212, 175, 55, 0.1);
-        border-top: 4px solid #D4AF37; 
+        margin-top: 30px;
+        width: 38px;
+        height: 38px;
+        border: 3px solid rgba(212, 175, 55, 0.15);
+        border-top: 3px solid #D4AF37; 
         border-radius: 50%;
         opacity: 0;
         animation: fadeIn 0.5s ease-out 0.5s forwards, spin 1s linear infinite;
@@ -88,9 +109,11 @@ def show_splash_screen():
 
     <!-- 畫面內容區塊 -->
     <div id="splash-screen">
+        <div class="splash-brand-tag">PAN DA CHU</div>
         <div class="splash-title">
-            🐟 <span class="gold-text">阿布潘水產</span>
+            <span class="gold-text">潘大廚</span>
         </div>
+        <div class="splash-slogan">一日三餐，就吃潘大廚</div>
         <div class="splash-subtitle">智慧餐飲營運管理平台</div>
         <div class="spinner"></div>
     </div>
@@ -99,6 +122,6 @@ def show_splash_screen():
     splash_placeholder = st.empty()
     splash_placeholder.markdown(splash_html, unsafe_allow_html=True)
     
-    time.sleep(2.5)
+    time.sleep(2.6)
     
     splash_placeholder.empty()
