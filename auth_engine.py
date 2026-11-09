@@ -45,15 +45,16 @@ def check_login():
 
     # --- 如果還沒登入，顯示這段登入表單 ---
     st.markdown("<br><br>", unsafe_allow_html=True) # 往下推一點比較好看
-    st.markdown("<h2 style='text-align: center;'>🐟 阿布潘水產</h2>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; color: gray;'>請選擇所屬部門並輸入個人密碼</p>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align: center; color: #FFF;'>👨‍🍳 潘大廚</h2>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #00A850; font-weight: bold;'>一日三餐，就吃潘大廚</p>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: gray; font-size: 13px;'>請選擇所屬部門並輸入個人密碼</p>", unsafe_allow_html=True)
     
     # 讓畫面置中
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         with st.container(border=True):
             dept_list = list(DEPT_CREDENTIALS.keys())
-            selected_dept = st.selectbox("📌 所屬部門", dept_list)
+            selected_dept = st.selectbox("📌 使用者登入", dept_list)
             entered_pin = st.text_input("🔑 個人密碼", type="password")
             
             if st.button("登入系統", use_container_width=True, type="primary"):
