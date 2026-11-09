@@ -5,12 +5,14 @@ import urllib.parse
 from record_engine import get_gspread_client, SHEET_NAME
 
 # ==========================================
-# ☁️ Google Sheets 叫菜資料庫專用引擎
+# 🛡️ 具備防爆、防 429 額度超載的 Google Sheets 引擎
 # ==========================================
+@st.cache_data(ttl=60, show_spinner=False)
 def get_veg_db():
-    """讀取廠商與菜品主檔 (只增不減)"""
+    """讀取廠商與菜品主檔 (記憶體快取防當機版)"""
     client = get_gspread_client()
-    if not client: return pd.DataFrame(columns=["vendor", "item_name", "unit"])
+    if not client: 
+        return pd.DataFrame(columns=["vendor", "item_name", "unit"])
     try:
         sp = client.open(SHEET_NAME)
         try:
@@ -21,7 +23,6 @@ def get_veg_db():
         records = sheet.get_all_records()
         return pd.DataFrame(records) if records else pd.DataFrame(columns=["vendor", "item_name", "unit"])
     except Exception as e:
-        st.error(f"連線菜品庫失敗: {e}")
         return pd.DataFrame(columns=["vendor", "item_name", "unit"])
 
 def add_veg_item_to_cloud(vendor, item_name, unit):
@@ -32,9 +33,10 @@ def add_veg_item_to_cloud(vendor, item_name, unit):
         sp = client.open(SHEET_NAME)
         sheet = sp.worksheet("叫菜廠商菜品庫")
         sheet.append_row([str(vendor).strip(), str(item_name).strip(), str(unit).strip()])
+        get_veg_db.clear() # 成功後清除快取
         return True
     except Exception as e:
-        st.error(f"新增菜品至雲端失敗: {e}")
+        st.error(f"新增菜品失敗，請稍候重試: {e}")
         return False
 
 def save_veg_order_to_cloud(order_record):
@@ -63,18 +65,17 @@ def save_veg_order_to_cloud(order_record):
         return False
 
 # ==========================================
-# 🥬 叫菜系統前端介面 (黑底高對比 + 精準同一行排版)
+# 🥬 叫菜系統前端介面 (防連擊 + 單行緊湊排版)
 # ==========================================
 def show():
     current_user = st.session_state.get("user_name", "門市後台")
-    st.markdown("#### 🥬 潘大廚 - 門市每日叫菜作業")
+    st.markdown("#### 🥬 潘大廚 - 叫菜作業")
     
-    # 讀取雲端已建立的廠商與菜品
     df_veg = get_veg_db()
     existing_vendors = df_veg["vendor"].dropna().unique().tolist() if not df_veg.empty else []
 
     # ------------------------------------------
-    # 區塊 1：廠商選擇與新廠商建立
+    # 區塊 1：廠商選擇
     # ------------------------------------------
     col_v1, col_v2 = st.columns([3, 2])
     with col_v1:
@@ -89,7 +90,7 @@ def show():
     current_vendor = new_vendor_name.strip() if selected_vendor == "＋【新增廠商】" else selected_vendor
 
     # ------------------------------------------
-    # 區塊 2：建立該廠商的新菜品
+    # 區塊 2：建立該廠商的新菜品 (防連擊保護)
     # ------------------------------------------
     with st.expander(f"➕ 為【{current_vendor if current_vendor else '廠商'}】新增常態菜品與計價單位"):
         col_c1, col_c2, col_c3 = st.columns([3, 2, 2])
@@ -99,7 +100,10 @@ def show():
             add_unit = st.text_input("單位", placeholder="例如：斤 / 顆 / 箱")
         with col_c3:
             st.markdown("<div style='margin-top:28px;'></div>", unsafe_allow_html=True)
-            if st.button("💾 存入菜品庫", use_container_width=True):
+            # 🌟 防連點按鈕 1：存入菜品庫
+            btn_add_ph = st.empty()
+            if btn_add_ph.button("💾 存入菜品庫", use_container_width=True, key="btn_add_veg_db"):
+                btn_add_ph.button("⏳ 寫入中，請勿重複點擊...", disabled=True, use_container_width=True, key="btn_add_veg_db_disabled")
                 if not current_vendor:
                     st.error("請先輸入或選擇廠商名稱！")
                 elif not add_item_name.strip() or not add_unit.strip():
@@ -119,7 +123,7 @@ def show():
     st.divider()
 
     # ------------------------------------------
-    # 區塊 3：15 格下單清單 (精準同一行，數量接單位)
+    # 區塊 3：15 格下單清單
     # ------------------------------------------
     st.markdown("##### 📋 叫菜清單 ")
     
@@ -127,9 +131,7 @@ def show():
     orders_to_send = []
 
     for i in range(15):
-        # 使用自適應容器，維持橫向單行
         with st.container():
-            # 欄位分配：序號(0.8) | 菜品選單(5) | 數量輸入(2.5) | 單位顯示(2)
             c_idx, c_item, c_qty, c_unit = st.columns([0.8, 5, 2.5, 2])
             
             with c_idx:
@@ -141,7 +143,6 @@ def show():
             final_item_name = ""
             default_unit = ""
             
-            # 選擇自訂品項處理
             if item_sel == "✏️ 自訂臨時菜品":
                 sub_c1, sub_c2 = st.columns([3, 2])
                 with sub_c1:
@@ -152,7 +153,6 @@ def show():
                 final_item_name = item_sel
                 default_unit = unit_map.get(item_sel, "斤")
 
-            # 數量輸入 (緊接在菜品右側)
             qty = 0
             with c_qty:
                 if final_item_name:
@@ -163,7 +163,6 @@ def show():
                 else:
                     st.markdown("<p style='margin-top: 8px; color: #444; text-align: center;'>-</p>", unsafe_allow_html=True)
 
-            # 單位顯示 (緊接在數量右側，採用顯眼的亮綠金色標籤)
             with c_unit:
                 if final_item_name:
                     st.markdown(f"""
@@ -206,9 +205,13 @@ def show():
         order_note = st.text_input("📝 備註需求 (例如：請於早晨 07:30 前送達後門)")
 
     # ------------------------------------------
-    # 區塊 5：生成 LINE 訂單並一鍵發送
+    # 區塊 5：生成 LINE 訂單 (防連點雙重保險)
     # ------------------------------------------
-    if st.button("🚀 產生叫菜訂單並發送 LINE", type="primary", use_container_width=True):
+    btn_submit_ph = st.empty()
+    if btn_submit_ph.button("🚀 產生叫菜訂單並發送 LINE", type="primary", use_container_width=True, key="btn_send_veg_order"):
+        # 按下瞬間：按鈕立刻變灰鎖死，防止第二下點擊！
+        btn_submit_ph.button("⏳ 訂單處理中，請稍候勿關閉視窗...", disabled=True, use_container_width=True, key="btn_send_veg_order_disabled")
+        
         if not current_vendor:
             st.error("請確認已填寫或選擇廠商名稱！")
         elif not orders_to_send:
@@ -231,7 +234,6 @@ def show():
                 line_msg += f"💡 【備註】：{order_note.strip()}\n"
             line_msg += f"請廠商確認收到並回覆，感謝配合！"
 
-            # 存入 Google Sheets 歷史訂單
             now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             save_veg_order_to_cloud({
                 "order_time": now_str,
