@@ -63,7 +63,7 @@ def save_veg_order_to_cloud(order_record):
         return False
 
 # ==========================================
-# 🥬 叫菜系統前端介面
+# 🥬 叫菜系統前端介面 (黑底高對比 + 精準同一行排版)
 # ==========================================
 def show():
     current_user = st.session_state.get("user_name", "門市後台")
@@ -81,7 +81,6 @@ def show():
         vendor_options = ["＋【新增廠商】"] + existing_vendors if existing_vendors else ["＋【新增廠商】"]
         selected_vendor = st.selectbox("🏬 選擇菜商 (廠商名稱)", vendor_options)
     
-    # 如果選擇新增廠商，或是第一次使用
     new_vendor_name = ""
     if selected_vendor == "＋【新增廠商】":
         with col_v2:
@@ -90,12 +89,12 @@ def show():
     current_vendor = new_vendor_name.strip() if selected_vendor == "＋【新增廠商】" else selected_vendor
 
     # ------------------------------------------
-    # 區塊 2：建立該廠商的新菜品 (人員只增不減)
+    # 區塊 2：建立該廠商的新菜品
     # ------------------------------------------
     with st.expander(f"➕ 為【{current_vendor if current_vendor else '廠商'}】新增常態菜品與計價單位"):
         col_c1, col_c2, col_c3 = st.columns([3, 2, 2])
         with col_c1:
-            add_item_name = st.text_input("菜品名稱", placeholder="例如：高麗菜(初秋)")
+            add_item_name = st.text_input("菜品名稱", placeholder="例如：高山高麗菜")
         with col_c2:
             add_unit = st.text_input("單位", placeholder="例如：斤 / 顆 / 箱")
         with col_c3:
@@ -110,7 +109,6 @@ def show():
                         st.success(f"✅ 已成功將【{add_item_name}】加入【{current_vendor}】的菜品清單！")
                         st.rerun()
 
-    # 取得目前所選廠商專屬的菜品列表
     vendor_items = []
     unit_map = {}
     if not df_veg.empty and current_vendor in df_veg["vendor"].values:
@@ -121,50 +119,72 @@ def show():
     st.divider()
 
     # ------------------------------------------
-    # 區塊 3：15 格下單清單
+    # 區塊 3：15 格下單清單 (精準同一行，數量接單位)
     # ------------------------------------------
     st.markdown("##### 📋 叫菜清單 (預設 15 格採購單)")
     
     item_choice_list = ["(無)"] + vendor_items + ["✏️ 自訂臨時菜品"]
-
     orders_to_send = []
 
-    # 建立 15 格欄位
     for i in range(15):
-        c1, c2, c3, c4 = st.columns([1, 4, 3, 2])
-        with c1:
-            st.markdown(f"<p style='margin-top:10px; color:#888; text-align:center;'>#{i+1}</p>", unsafe_allow_html=True)
-        with c2:
-            item_sel = st.selectbox(f"品項 #{i+1}", item_choice_list, key=f"veg_item_{i}", label_visibility="collapsed")
-        
-        final_item_name = ""
-        default_unit = ""
-        
-        if item_sel == "✏️ 自訂臨時菜品":
-            with c3:
-                final_item_name = st.text_input(f"自訂品名 #{i+1}", key=f"custom_name_{i}", placeholder="手打品名", label_visibility="collapsed")
-            with c4:
-                default_unit = st.text_input(f"自訂單位 #{i+1}", key=f"custom_unit_{i}", placeholder="單位", label_visibility="collapsed")
-        elif item_sel != "(無)":
-            final_item_name = item_sel
-            default_unit = unit_map.get(item_sel, "斤")
-            with c3:
-                st.markdown(f"<p style='margin-top:8px; font-weight:bold; color:#00C853;'>{final_item_name}</p>", unsafe_allow_html=True)
-            with c4:
-                st.markdown(f"<p style='margin-top:8px; color:#aaa;'>單位: {default_unit}</p>", unsafe_allow_html=True)
-        else:
-            with c3:
-                st.markdown("<p style='margin-top:8px; color:#444;'>-</p>", unsafe_allow_html=True)
-            with c4:
-                st.markdown("<p style='margin-top:8px; color:#444;'>-</p>", unsafe_allow_html=True)
+        # 使用自適應容器，維持橫向單行
+        with st.container():
+            # 欄位分配：序號(0.8) | 菜品選單(5) | 數量輸入(2.5) | 單位顯示(2)
+            c_idx, c_item, c_qty, c_unit = st.columns([0.8, 5, 2.5, 2])
+            
+            with c_idx:
+                st.markdown(f"<p style='margin-top: 8px; font-weight: bold; color: #888; text-align: center;'>#{i+1}</p>", unsafe_allow_html=True)
+            
+            with c_item:
+                item_sel = st.selectbox(f"品項 #{i+1}", item_choice_list, key=f"veg_item_{i}", label_visibility="collapsed")
+            
+            final_item_name = ""
+            default_unit = ""
+            
+            # 選擇自訂品項處理
+            if item_sel == "✏️ 自訂臨時菜品":
+                sub_c1, sub_c2 = st.columns([3, 2])
+                with sub_c1:
+                    final_item_name = st.text_input(f"自訂品名 #{i+1}", key=f"custom_name_{i}", placeholder="輸入品名", label_visibility="collapsed")
+                with sub_c2:
+                    default_unit = st.text_input(f"自訂單位 #{i+1}", key=f"custom_unit_{i}", placeholder="單位", label_visibility="collapsed")
+            elif item_sel != "(無)":
+                final_item_name = item_sel
+                default_unit = unit_map.get(item_sel, "斤")
 
-        # 數量輸入
-        qty = 0
-        if final_item_name:
-            col_q, _ = st.columns([2, 8])
-            with col_q:
-                qty = st.number_input(f"數量", min_value=0, step=1, key=f"veg_qty_{i}", label_visibility="collapsed")
-            if qty > 0:
+            # 數量輸入 (緊接在菜品右側)
+            qty = 0
+            with c_qty:
+                if final_item_name:
+                    qty = st.number_input(
+                        f"數量 #{i+1}", min_value=0, step=1, value=0, 
+                        key=f"veg_qty_{i}", label_visibility="collapsed"
+                    )
+                else:
+                    st.markdown("<p style='margin-top: 8px; color: #444; text-align: center;'>-</p>", unsafe_allow_html=True)
+
+            # 單位顯示 (緊接在數量右側，採用顯眼的亮綠金色標籤)
+            with c_unit:
+                if final_item_name:
+                    st.markdown(f"""
+                    <div style='
+                        margin-top: 4px;
+                        background-color: #1A3826;
+                        border: 1px solid #00C853;
+                        color: #00FF66;
+                        font-weight: 700;
+                        font-size: 14px;
+                        padding: 5px 10px;
+                        border-radius: 6px;
+                        text-align: center;
+                        display: inline-block;
+                        min-width: 60px;
+                    '>{default_unit}</div>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.markdown("<p style='margin-top: 8px; color: #444;'>-</p>", unsafe_allow_html=True)
+
+            if final_item_name and qty > 0:
                 orders_to_send.append({
                     "item": final_item_name,
                     "qty": qty,
@@ -192,13 +212,11 @@ def show():
         if not current_vendor:
             st.error("請確認已填寫或選擇廠商名稱！")
         elif not orders_to_send:
-            st.warning("⚠️ 您尚未在 15 格欄位中填寫任何叫菜數量！")
+            st.warning("⚠️ 您尚未在欄位中填寫任何叫菜數量！")
         else:
-            # 組裝 LINE 文字
             line_msg = f"🥬 【潘大廚 - 門市叫菜單】\n"
             line_msg += f"🏬 廠商：{current_vendor}\n"
             line_msg += f"🗓️ 希望到貨日：{delivery_str}\n"
-            line_msg += f"👨‍🍳 訂購人員：{current_user}\n"
             line_msg += f"──────────────────\n"
             line_msg += f"📋 【訂購明細】：\n"
             
@@ -224,7 +242,6 @@ def show():
                 "note": order_note
             })
 
-            # 產生 LINE 外部跳轉連結
             encoded_msg = urllib.parse.quote(line_msg)
             line_url = f"https://line.me/R/msg/text/?{encoded_msg}"
 
@@ -234,7 +251,7 @@ def show():
 
     # 顯示發送介面
     if st.session_state.get("veg_line_msg"):
-        st.success("✅ 叫菜單已成功建檔並存入雲端試算表！")
+        st.success("✅ 叫菜單已成功建檔！")
         st.link_button("📲 打開手機 LINE 直接發送至廠商群組", url=st.session_state["veg_line_url"], type="primary", use_container_width=True)
         st.info("💻 電腦版可直接複製下方訊息貼至 LINE：")
         st.code(st.session_state["veg_line_msg"], language="text")
