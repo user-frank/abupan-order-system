@@ -92,8 +92,8 @@ if is_logged_in:
     # --- 根據部門轉接房間 ---
     # --- 根據 4 大身分轉接專屬房間 ---
     if current_dept == "👑 老闆":
-        from views import boss
-        boss.show()
+        from views import panboss   # 👈 轉接到全新獨立檔 panboss.py
+        panboss.show()
 
     elif current_dept == "👨‍🍳 營運主廚 (廚政與門市)":
         if current_user == "門市後台管理":
