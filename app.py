@@ -100,8 +100,8 @@ if is_logged_in:
             from views import store_backstage
             store_backstage.show()
         else:
-            from views import sashimi # 前台出餐
-            sashimi.show()
+            from views import store_front # 前台獨立檔！
+            store_front.show()
 
     elif current_dept == "💰 財務會計":
         st.title("💰 財務會計專區")
