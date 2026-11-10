@@ -104,8 +104,8 @@ if is_logged_in:
             store_front.show()
 
     elif current_dept == "💰 財務會計":
-        st.title("💰 財務會計專區")
-        st.info("📊 門市成本核算與毛利損益報表模組建置中...")
+        from views import finance   # 👈 轉接到獨立 finance.py
+        finance.show()
 
     elif current_dept == "🛠️ 系統管理員":
         from views import demo_photo
