@@ -4,10 +4,10 @@ import datetime
 from record_engine import get_gspread_client, SHEET_NAME
 
 # ==========================================
-# ☁️ Google Sheets 門市日結資料庫引擎
+# ☁️ Google Sheets 門市日結資料庫引擎 (盲盤版)
 # ==========================================
-def save_daily_settlement_to_cloud(settle_data):
-    """將日結對帳紀錄寫入 Google 試算表"""
+def save_blind_settlement_to_cloud(settle_data):
+    """將門市盲盤實點紀錄寫入 Google 試算表"""
     client = get_gspread_client()
     if not client: return False
     try:
@@ -17,23 +17,26 @@ def save_daily_settlement_to_cloud(settle_data):
         except:
             sheet = sp.add_worksheet(title="門市日結對帳表", rows="1000", cols="12")
             sheet.append_row([
-                "settle_date", "store_name", "operator", "pos_total_revenue", 
-                "electronic_payment", "system_expected_cash", "reserve_cash", 
-                "counted_cash", "actual_operating_cash", "cash_variance", "status", "note"
+                "settle_date", "store_name", "operator", "submit_time",
+                "reserve_cash", "counted_cash", "actual_operating_cash", 
+                "pos_total_revenue", "electronic_payment", "system_expected_cash",
+                "cash_variance", "status", "note"
             ])
         
+        # 門市人員填寫實點數據，POS相關欄位預留待POS轉接或財務帶入
         sheet.append_row([
             settle_data["settle_date"],
             settle_data["store_name"],
             settle_data["operator"],
-            settle_data["pos_total_revenue"],
-            settle_data["electronic_payment"],
-            settle_data["system_expected_cash"],
+            settle_data["submit_time"],
             settle_data["reserve_cash"],
             settle_data["counted_cash"],
             settle_data["actual_operating_cash"],
-            settle_data["cash_variance"],
-            settle_data["status"],
+            settle_data.get("pos_total_revenue", 0),
+            settle_data.get("electronic_payment", 0),
+            settle_data.get("system_expected_cash", 0),
+            settle_data.get("cash_variance", 0),
+            settle_data.get("status", "待財務對帳"),
             settle_data["note"]
         ])
         return True
@@ -42,115 +45,135 @@ def save_daily_settlement_to_cloud(settle_data):
         return False
 
 # ==========================================
-# 💰 門市日結對帳前端介面
+# 💰 門市日結現場盲點介面 (純實點回報)
 # ==========================================
 def show():
     current_user = st.session_state.get("user_name", "門市人員")
     today = datetime.date.today()
     
-    st.markdown("#### 💰 門市每日下班日結與現金清點")
-    st.caption(f"操作同仁：{current_user} ｜ 嚴格執行日結防弊程序，差額超過 ±100 元將自動通報財務與總裁室")
+    st.markdown("#### 💰 門市每日下班現金盤點清點")
+    st.caption(f"操作同仁：{current_user} ｜ 每日打烊前確實清點錢櫃現金並如實回報")
 
+    # 選擇日期與門市
     col_s1, col_s2 = st.columns(2)
     with col_s1:
-        settle_date = st.date_input("🗓️ 日結結算日期", value=today, key="settle_date_input")
+        settle_date = st.date_input("🗓️ 盤點日期", value=today, key="settle_date_input")
         date_str = settle_date.strftime("%Y-%m-%d")
     with col_s2:
-        store_name = st.selectbox("🏬 結算門市", ["潘大廚 - 直營一號店", "直營二號店(籌備中)"])
+        store_name = st.selectbox("🏬 盤點門市", ["潘大廚 - 直營一號店", "直營二號店(籌備中)"])
 
     st.divider()
 
     # ------------------------------------------
-    # 區塊 1：系統自動帶入 (未來由 POS 自動轉接)
+    # 區塊：現場實際現金清點 (盲點，不展示系統帳面)
     # ------------------------------------------
-    st.markdown("##### 🖥️ 【系統應有帳面金額】(由 POS 系統串接帶入)")
-    col_p1, col_p2, col_p3 = st.columns(3)
-    
-    with col_p1:
-        # 目前為預留值，後續直接串接 POS
-        pos_total = st.number_input("當日 POS 總營業額 (元)", value=68500, step=100, help="未來由 POS 機 API 自動轉接帶入")
-    with col_p2:
-        electronic_pay = st.number_input("電子支付 / 信用卡總額 (元)", value=21300, step=100, help="LinePay、悠遊卡、外送平台等非現金總額")
-    with col_p3:
-        # 系統應有現金 = 總營業額 - 電子支付
-        system_expected_cash = pos_total - electronic_pay
-        st.metric(label="💡 系統應收營業現金", value=f"NT$ {system_expected_cash:,}")
+    st.markdown("##### 💵 【現場現金實點回報】")
+    st.info("💡 請現場同仁仔細盤點錢櫃內所有現鈔與零錢，總部系統將於送出後自動核對。")
 
-    st.divider()
-
-    # ------------------------------------------
-    # 區塊 2：門市後台現場手動清點盤點
-    # ------------------------------------------
-    st.markdown("##### 💵 【現場實際現金清點】(現場同仁下班盤點)")
     col_c1, col_c2, col_c3 = st.columns(3)
-    
     with col_c1:
-        reserve_cash = st.number_input("抽屜預留零用金底金 (元)", value=5000, step=500, help="找零用固定備用金（固定不變）")
+        reserve_cash = st.number_input(
+            "抽屜預留零用金底金 (元)", 
+            value=5000, 
+            step=500, 
+            help="找零用固定備用底金"
+        )
     with col_c2:
-        counted_cash = st.number_input("錢櫃點收現鈔總額 (含底金) (元)", min_value=0, value=52200, step=10, help="包含底金清點的所有現金總數")
+        counted_cash = st.number_input(
+            "錢櫃實點現鈔總額 (含底金) (元)", 
+            min_value=0, 
+            value=0, 
+            step=10, 
+            help="請將錢櫃裡所有鈔票與硬幣全部清點加總填入"
+        )
     with col_c3:
-        # 實際營業實收現金 = 點收現鈔總額 - 底金
-        actual_operating_cash = counted_cash - reserve_cash
-        st.metric(label="💵 實際清點營業現金", value=f"NT$ {actual_operating_cash:,}")
+        # 自動計算純營業現金
+        actual_operating_cash = max(0, counted_cash - reserve_cash)
+        st.markdown("<p style='font-size:12px; color:#888; margin-bottom:2px;'>實收營業現金 (扣除底金)</p>", unsafe_allow_html=True)
+        st.markdown(f"""
+        <div style='
+            background-color: #1A3826; 
+            border: 1px solid #00C853; 
+            color: #00FF66; 
+            font-size: 20px; 
+            font-weight: bold; 
+            padding: 6px 12px; 
+            border-radius: 6px; 
+            text-align: center;
+        '>NT$ {actual_operating_cash:,}</div>
+        """, unsafe_allow_html=True)
 
-    st.divider()
+    st.markdown("<br>", unsafe_allow_html=True)
 
-    # ------------------------------------------
-    # 區塊 3：自動計算現金溢短 (Over/Short) 與防弊警示
-    # ------------------------------------------
-    cash_variance = actual_operating_cash - system_expected_cash
-    
-    st.markdown("##### ⚖️ 【現金對帳差異分析】")
-    
-    v_col1, v_col2 = st.columns([1, 2])
-    with v_col1:
-        # 格式化差異
-        if cash_variance > 0:
-            diff_label = f"+NT$ {cash_variance:,} (現金盤盈/溢)"
-        elif cash_variance < 0:
-            diff_label = f"-NT$ {abs(cash_variance):,} (現金短少/虧)"
-        else:
-            diff_label = "NT$ 0 (完全相符)"
+    # 門市人員專用備註 (零星開銷/特殊狀況)
+    settle_note = st.text_input(
+        "📝 今日現場支出或備註說明", 
+        placeholder="例如：自零用金買冰塊 100 元、換燈泡 150 元、某外送單少收 5 元...等"
+    )
 
-        st.metric(label="現金溢短差額", value=diff_label)
-
-    with v_col2:
-        # 防弊核心：超過 ±100 元標示紅燈警示
-        status = ""
-        if abs(cash_variance) > 100:
-            status = "🚨 異常警示"
-            st.error(f"🚨【異常警告】現金誤差達 NT$ {cash_variance:,}，已超過允許標準 (±100元)！此筆紀錄將直接標記並提報財務部與潘董！")
-        elif cash_variance != 0:
-            status = "⚠️ 輕微誤差"
-            st.warning(f"⚠️【注意】現金有些微誤差 (NT$ {cash_variance:,})，在允許容許值內，請再次覆核錢櫃。")
-        else:
-            status = "🟢 帳實相符"
-            st.success("🟢【帳實完美相符】實點現金與系統數據完全一致！")
-
-    settle_note = st.text_input("📝 日結備註事項 (若有長短溢短請在此說明原因，例如：某客少收5元)", placeholder="請填寫任何異常說明...")
+    st.markdown("<br>", unsafe_allow_html=True)
 
     # ------------------------------------------
-    # 區塊 4：送出審核存檔 (防連點保護)
+    # 區塊：防連擊上傳與成功反饋
     # ------------------------------------------
     btn_settle_ph = st.empty()
-    if btn_settle_ph.button("🔒 確認日結無誤並上傳總部", type="primary", use_container_width=True, key="btn_submit_settle"):
-        btn_settle_ph.button("⏳ 雲端核算存檔中，請勿關閉視窗...", disabled=True, use_container_width=True, key="btn_submit_settle_dis")
+    if btn_settle_ph.button("🔒 確認金額無誤並上傳總部", type="primary", use_container_width=True, key="btn_submit_blind_settle"):
+        btn_settle_ph.button("⏳ 數據加密傳輸中，請稍候...", disabled=True, use_container_width=True, key="btn_submit_blind_settle_dis")
         
-        record_payload = {
-            "settle_date": date_str,
-            "store_name": store_name,
-            "operator": current_user,
-            "pos_total_revenue": int(pos_total),
-            "electronic_payment": int(electronic_pay),
-            "system_expected_cash": int(system_expected_cash),
-            "reserve_cash": int(reserve_cash),
-            "counted_cash": int(counted_cash),
-            "actual_operating_cash": int(actual_operating_cash),
-            "cash_variance": int(cash_variance),
-            "status": status,
-            "note": settle_note.strip()
-        }
+        if counted_cash == 0:
+            st.warning("⚠️ 請確認錢櫃現鈔總額是否已填寫！")
+        else:
+            submit_time_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            
+            record_payload = {
+                "settle_date": date_str,
+                "store_name": store_name,
+                "operator": current_user,
+                "submit_time": submit_time_str,
+                "reserve_cash": int(reserve_cash),
+                "counted_cash": int(counted_cash),
+                "actual_operating_cash": int(actual_operating_cash),
+                "note": settle_note.strip()
+            }
+            
+            if save_blind_settlement_to_cloud(record_payload):
+                # 紀錄到 Session State，供介面展示完成狀態
+                st.session_state["settle_success_info"] = {
+                    "date": date_str,
+                    "store": store_name,
+                    "time": submit_time_str,
+                    "operator": current_user,
+                    "cash": actual_operating_cash
+                }
+                st.rerun()
+
+    # 🌟 成功反饋卡片 (確認同仁知道今天已完成)
+    if st.session_state.get("settle_success_info"):
+        info = st.session_state["settle_success_info"]
+        st.divider()
+        st.markdown(f"""
+        <div style='
+            background-color: #0E2A1A; 
+            border: 2px solid #00C853; 
+            border-radius: 8px; 
+            padding: 16px 20px; 
+            margin-top: 10px;
+        '>
+            <div style='font-size: 18px; font-weight: bold; color: #00FF66; margin-bottom: 6px;'>
+                ✅ 【今日現金盤點數據已成功傳輸至總部！】
+            </div>
+            <div style='font-size: 13px; color: #E0E0E0; line-height: 1.6;'>
+                🏬 <b>結算門市：</b>{info['store']}<br>
+                🗓️ <b>結算日期：</b>{info['date']}<br>
+                💵 <b>回報營業現金：</b>NT$ {info['cash']:,} 元<br>
+                👤 <b>盤點同仁：</b>{info['operator']} (傳輸時間：{info['time']})
+            </div>
+            <div style='margin-top: 10px; font-size: 12px; color: #88C599;'>
+                💡 數據已封存送往財務，辛苦了，可以放心完成打烊作業！
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
         
-        if save_daily_settlement_to_cloud(record_payload):
-            st.success(f"✅ 【{store_name}】{date_str} 日結對帳單已成功存檔至中央雲端！")
+        if st.button("關閉此完成提示", use_container_width=True):
+            del st.session_state["settle_success_info"]
             st.rerun()
